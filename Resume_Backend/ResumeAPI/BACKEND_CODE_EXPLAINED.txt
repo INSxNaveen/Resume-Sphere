@@ -1,0 +1,1645 @@
+================================================================================
+       SMART RESUME MATCHER API -- COMPLETE BACKEND CODE EXPLANATION
+              (A Beginner-Friendly, Step-by-Step Guide)
+================================================================================
+
+Written for beginners who want to understand every piece of the backend,
+then recreate it by reading this document and copy-pasting the code.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1.  What Does This Project Do?
+2.  Technology Stack and Prerequisites
+3.  Project Folder Structure
+4.  Step 1  -- Project File (ResumeAPI.csproj)
+5.  Step 2  -- Configuration File (appsettings.json)
+6.  Step 3  -- Data Models (Models folder)
+7.  Step 4  -- Database Context (Data/AppDbContext.cs)
+8.  Step 5  -- DTOs -- Data Transfer Objects (DTOs folder)
+9.  Step 6  -- Service Interfaces (Services/I*.cs)
+10. Step 7  -- Service Implementations (Services/*.cs)
+11. Step 8  -- API Controllers (Controllers folder)
+12. Step 9  -- Application Entry Point (Program.cs)
+13. How Everything Connects (The Big Picture)
+14. How to Run the Project
+
+
+================================================================================
+1. WHAT DOES THIS PROJECT DO?
+================================================================================
+
+This is a backend Web API built with ASP.NET Core 8. It lets users:
+
+  1) UPLOAD a resume (PDF or DOCX file).
+  2) EXTRACT skills from the resume text automatically.
+  3) MATCH the resume against a database of jobs and rank them by relevance.
+  4) ANALYZE SKILL GAPS -- compare your resume skills vs. a specific job's
+     required skills to see what you are missing.
+  5) GET LEARNING RESOURCES -- for any missing skill, get curated YouTube
+     tutorials and article links to learn that skill.
+
+Think of it as: Upload Resume -> Extract Skills -> Match Jobs -> Find Gaps ->
+                Learn Missing Skills
+
+
+================================================================================
+2. TECHNOLOGY STACK AND PREREQUISITES
+================================================================================
+
+Before you start, you need to install:
+
+  * .NET 8 SDK           -- https://dotnet.microsoft.com/download/dotnet/8.0
+  * PostgreSQL            -- https://www.postgresql.org/download/
+  * A code editor         -- Visual Studio or VS Code
+  * (Optional) Postman    -- to test API endpoints
+
+NuGet Packages used (installed automatically via the .csproj file):
+  * Npgsql.EntityFrameworkCore.PostgreSQL -- PostgreSQL database driver
+  * PdfPig                                -- reads text from PDF files
+  * DocumentFormat.OpenXml                -- reads text from DOCX files
+  * Swashbuckle.AspNetCore                -- Swagger UI for testing APIs
+  * Microsoft.EntityFrameworkCore.Design  -- for database migrations
+
+
+================================================================================
+3. PROJECT FOLDER STRUCTURE
+================================================================================
+
+  ResumeAPI/
+  |-- Controllers/                  <-- API endpoints (HTTP routes)
+  |   |-- ResumeController.cs       <-- Upload resume, get skills
+  |   |-- JobsController.cs         <-- Match jobs, list all jobs
+  |   |-- SkillGapController.cs     <-- Compare resume vs job skills
+  |   +-- ResourcesController.cs    <-- Get learning resources for a skill
+  |
+  |-- DTOs/                         <-- Data Transfer Objects (API responses)
+  |   |-- JobMatchRequest.cs        <-- Input for job matching
+  |   |-- JobMatchResult.cs         <-- Output of job matching
+  |   |-- ResumeUploadResponse.cs   <-- Output after uploading resume
+  |   |-- SkillGapResult.cs         <-- Output of skill gap analysis
+  |   +-- ResourceResult.cs         <-- Output of learning resources
+  |
+  |-- Data/                         <-- Database configuration
+  |   +-- AppDbContext.cs           <-- EF Core database context + seed data
+  |
+  |-- Models/                       <-- Database table definitions
+  |   |-- User.cs                   <-- Users table
+  |   |-- Resume.cs                 <-- Resumes table
+  |   |-- Job.cs                    <-- Jobs table
+  |   |-- Skill.cs                  <-- Skills table
+  |   +-- JobSkill.cs               <-- Many-to-many link: Job <-> Skill
+  |
+  |-- Services/                     <-- Business logic
+  |   |-- IResumeParserService.cs   <-- Interface: parse resume file
+  |   |-- ResumeParserService.cs    <-- Implementation: extract text from PDF/DOCX
+  |   |-- ISkillExtractorService.cs <-- Interface: extract skills from text
+  |   |-- SkillExtractorService.cs  <-- Implementation: keyword matching
+  |   |-- IJobMatchService.cs       <-- Interface: match skills to jobs
+  |   |-- JobMatchService.cs        <-- Implementation: scoring algorithm
+  |   |-- ISkillGapService.cs       <-- Interface: find missing skills
+  |   |-- SkillGapService.cs        <-- Implementation: gap analysis
+  |   |-- ILearningResourceService.cs <-- Interface: get learning links
+  |   +-- LearningResourceService.cs  <-- Implementation: curated resource map
+  |
+  |-- Migrations/                   <-- Auto-generated database migrations
+  |-- Program.cs                    <-- Application entry point (startup)
+  |-- appsettings.json              <-- Configuration (DB connection string)
+  +-- ResumeAPI.csproj              <-- Project file (dependencies)
+
+
+================================================================================
+4. STEP 1 -- PROJECT FILE (ResumeAPI.csproj)
+================================================================================
+
+WHAT IT DOES:
+  This XML file tells .NET which SDK to use, which version of .NET to target,
+  and which NuGet packages (libraries) to install.
+
+LOGIC:
+  * TargetFramework = net8.0 -> We use .NET 8.
+  * Nullable = enable -> The compiler warns us about possible null values.
+  * ImplicitUsings = enable -> Common "using" statements are auto-included.
+  * PackageReference entries -> Each one installs a library we need.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.20" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+</Project>
+
+--- END CODE ---------------------------------------------------------------
+
+
+================================================================================
+5. STEP 2 -- CONFIGURATION FILE (appsettings.json)
+================================================================================
+
+WHAT IT DOES:
+  Stores app settings. The most important one is the database connection string.
+
+LOGIC:
+  * "DefaultConnection" tells Entity Framework Core how to connect to your
+    PostgreSQL database.
+  * Host=localhost -> database is on your computer.
+  * Port=5432 -> default PostgreSQL port.
+  * Database=ResumeMatcherDb -> the database name (EF Core creates it for you).
+  * Username and Password -> your PostgreSQL login credentials.
+
+IMPORTANT: Change "Username" and "Password" to match YOUR PostgreSQL setup.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=ResumeMatcherDb;Username=postgres;Password=root"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+================================================================================
+6. STEP 3 -- DATA MODELS (Models folder)
+================================================================================
+
+Models represent database TABLES. Each class = one table, each property = one
+column. Entity Framework Core (EF Core) reads these classes and creates the
+actual tables in PostgreSQL.
+
+
+----------------------------------
+6a. Models/User.cs
+----------------------------------
+
+WHAT IT DOES:
+  Represents a user who uploads resumes.
+
+LOGIC:
+  * Id           -> Primary key (auto-incremented by the database).
+  * Name         -> The user's name.
+  * Email        -> The user's email.
+  * CreatedAt    -> When the user was created (defaults to current UTC time).
+  * Resumes      -> Navigation property: one user can have MANY resumes.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+namespace ResumeAPI.Models;
+
+public class User
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<Resume> Resumes { get; set; } = new List<Resume>();
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+----------------------------------
+6b. Models/Resume.cs
+----------------------------------
+
+WHAT IT DOES:
+  Represents an uploaded resume file stored in the database.
+
+LOGIC:
+  * Id           -> Primary key.
+  * UserId       -> Foreign key linking to User table (who uploaded it).
+  * FileName     -> Original file name (e.g., "john_resume.pdf").
+  * RawText      -> The full text extracted from the PDF/DOCX. This is what
+                   we search through to find skills.
+  * UploadedAt   -> Timestamp of upload.
+  * User?        -> Navigation property back to the User who owns this resume.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+namespace ResumeAPI.Models;
+
+public class Resume
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string RawText { get; set; } = string.Empty;
+    public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+
+    public User? User { get; set; }
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+----------------------------------
+6c. Models/Skill.cs
+----------------------------------
+
+WHAT IT DOES:
+  Represents a technical skill (e.g., "Python", "React", "Docker").
+
+LOGIC:
+  * Id        -> Primary key.
+  * Name      -> The skill name (must be unique in the database).
+  * JobSkills -> Navigation property: which jobs require this skill.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+namespace ResumeAPI.Models;
+
+public class Skill
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+
+    public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+----------------------------------
+6d. Models/Job.cs
+----------------------------------
+
+WHAT IT DOES:
+  Represents a job listing with a title, company, and description.
+
+LOGIC:
+  * Id          -> Primary key.
+  * Title       -> Job title (e.g., "Python Backend Developer").
+  * Company     -> Company name.
+  * Description -> Short description of the role.
+  * JobSkills   -> Navigation property: which skills this job requires
+                  (linked through the JobSkill join table).
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+namespace ResumeAPI.Models;
+
+public class Job
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Company { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+
+    public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+----------------------------------
+6e. Models/JobSkill.cs
+----------------------------------
+
+WHAT IT DOES:
+  This is a JOIN TABLE for a many-to-many relationship between Job and Skill.
+  One job can require MANY skills. One skill can belong to MANY jobs.
+
+LOGIC:
+  * JobId    -> Foreign key to Job table.
+  * Job?     -> Navigation property to the related Job.
+  * SkillId  -> Foreign key to Skill table.
+  * Skill?   -> Navigation property to the related Skill.
+  * The composite primary key is (JobId, SkillId) -- defined in AppDbContext.
+
+WHY DO WE NEED THIS?
+  In relational databases, you cannot directly have a "list" inside a row.
+  Instead, you create a separate table (JobSkill) where each row says
+  "Job #X requires Skill #Y". This is called a many-to-many relationship.
+
+  Example rows in the JobSkill table:
+    JobId=1, SkillId=1  -> "Python Backend Developer" requires "Python"
+    JobId=1, SkillId=6  -> "Python Backend Developer" requires "SQL"
+    JobId=2, SkillId=4  -> "Full Stack Developer" requires "JavaScript"
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+namespace ResumeAPI.Models;
+
+public class JobSkill
+{
+    public int JobId { get; set; }
+    public Job? Job { get; set; }
+
+    public int SkillId { get; set; }
+    public Skill? Skill { get; set; }
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+================================================================================
+7. STEP 4 -- DATABASE CONTEXT (Data/AppDbContext.cs)
+================================================================================
+
+WHAT IT DOES:
+  AppDbContext is the "bridge" between your C# code and the PostgreSQL database.
+  It tells Entity Framework Core:
+    1) Which tables exist (via DbSet properties).
+    2) How the tables relate to each other (via OnModelCreating).
+    3) What initial data to put in the database (seed data).
+
+LOGIC -- LINE BY LINE:
+
+  * DbSet<User> Users         -> Creates a "Users" table from the User model.
+  * DbSet<Resume> Resumes     -> Creates a "Resumes" table.
+  * DbSet<Skill> Skills       -> Creates a "Skills" table.
+  * DbSet<Job> Jobs           -> Creates a "Jobs" table.
+  * DbSet<JobSkill> JobSkills -> Creates a "JobSkills" join table.
+
+  OnModelCreating() configures:
+  1) COMPOSITE KEY for JobSkill: The primary key is a combination of
+     (JobId + SkillId), not a single Id column.
+  2) RELATIONSHIPS:
+     - JobSkill -> Job: Each JobSkill row points to one Job.
+     - JobSkill -> Skill: Each JobSkill row points to one Skill.
+     - Resume -> User: Each Resume belongs to one User.
+  3) UNIQUE INDEX on Skill.Name: No two skills can have the same name.
+  4) SEED DATA: Pre-populates 30 skills, 10 jobs, and links between them.
+
+  The seed data means your database is NOT empty when the app starts.
+  It includes skills like Python, Java, React, Docker, etc., and jobs like
+  "Python Backend Developer", "Data Scientist", etc.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Models;
+
+namespace ResumeAPI.Data;
+
+public class AppDbContext : DbContext
+{
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Resume> Resumes => Set<Resume>();
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<Job> Jobs => Set<Job>();
+    public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // JobSkill composite key
+        modelBuilder.Entity<JobSkill>()
+            .HasKey(js => new { js.JobId, js.SkillId });
+
+        modelBuilder.Entity<JobSkill>()
+            .HasOne(js => js.Job)
+            .WithMany(j => j.JobSkills)
+            .HasForeignKey(js => js.JobId);
+
+        modelBuilder.Entity<JobSkill>()
+            .HasOne(js => js.Skill)
+            .WithMany(s => s.JobSkills)
+            .HasForeignKey(js => js.SkillId);
+
+        // Unique skill name
+        modelBuilder.Entity<Skill>()
+            .HasIndex(s => s.Name)
+            .IsUnique();
+
+        // Resume -> User FK
+        modelBuilder.Entity<Resume>()
+            .HasOne(r => r.User)
+            .WithMany(u => u.Resumes)
+            .HasForeignKey(r => r.UserId);
+
+        // --- Seed Skills ---
+        modelBuilder.Entity<Skill>().HasData(
+            new Skill { Id = 1,  Name = "Python" },
+            new Skill { Id = 2,  Name = "Java" },
+            new Skill { Id = 3,  Name = "C#" },
+            new Skill { Id = 4,  Name = "JavaScript" },
+            new Skill { Id = 5,  Name = "TypeScript" },
+            new Skill { Id = 6,  Name = "SQL" },
+            new Skill { Id = 7,  Name = "PostgreSQL" },
+            new Skill { Id = 8,  Name = "MySQL" },
+            new Skill { Id = 9,  Name = "MongoDB" },
+            new Skill { Id = 10, Name = "React" },
+            new Skill { Id = 11, Name = "Angular" },
+            new Skill { Id = 12, Name = "Vue" },
+            new Skill { Id = 13, Name = "Node.js" },
+            new Skill { Id = 14, Name = ".NET" },
+            new Skill { Id = 15, Name = "ASP.NET Core" },
+            new Skill { Id = 16, Name = "Machine Learning" },
+            new Skill { Id = 17, Name = "Deep Learning" },
+            new Skill { Id = 18, Name = "TensorFlow" },
+            new Skill { Id = 19, Name = "PyTorch" },
+            new Skill { Id = 20, Name = "Docker" },
+            new Skill { Id = 21, Name = "Kubernetes" },
+            new Skill { Id = 22, Name = "Git" },
+            new Skill { Id = 23, Name = "REST API" },
+            new Skill { Id = 24, Name = "GraphQL" },
+            new Skill { Id = 25, Name = "AWS" },
+            new Skill { Id = 26, Name = "Azure" },
+            new Skill { Id = 27, Name = "Linux" },
+            new Skill { Id = 28, Name = "Data Analysis" },
+            new Skill { Id = 29, Name = "Pandas" },
+            new Skill { Id = 30, Name = "Scikit-learn" }
+        );
+
+        // --- Seed Jobs ---
+        modelBuilder.Entity<Job>().HasData(
+            new Job { Id = 1,  Title = "Python Backend Developer",     Company = "TechCorp",       Description = "Build scalable Python APIs." },
+            new Job { Id = 2,  Title = "Full Stack Developer",         Company = "WebSolutions",   Description = "Frontend + backend web development." },
+            new Job { Id = 3,  Title = "Data Scientist",               Company = "DataLabs",       Description = "ML model building and data analysis." },
+            new Job { Id = 4,  Title = "DevOps Engineer",              Company = "CloudOps",       Description = "CI/CD, infrastructure, and cloud." },
+            new Job { Id = 5,  Title = ".NET Developer",               Company = "EnterpriseSoft", Description = "Enterprise application development with .NET." },
+            new Job { Id = 6,  Title = "Frontend React Developer",     Company = "UIStudio",       Description = "Build modern React UIs." },
+            new Job { Id = 7,  Title = "Database Administrator",       Company = "DBMasters",      Description = "Manage and optimize databases." },
+            new Job { Id = 8,  Title = "Machine Learning Engineer",    Company = "AI Dynamics",    Description = "Deploy and tune ML models." },
+            new Job { Id = 9,  Title = "Cloud Solutions Architect",    Company = "SkyArch",        Description = "Design cloud-native architectures." },
+            new Job { Id = 10, Title = "Java Microservices Developer", Company = "MicroTech",      Description = "Build Java-based microservices." }
+        );
+
+        // --- Seed JobSkills (which job needs which skill) ---
+        modelBuilder.Entity<JobSkill>().HasData(
+            // Job 1: Python Backend Developer -> Python, SQL, PostgreSQL, REST API, Git, Docker
+            new JobSkill { JobId = 1, SkillId = 1  },
+            new JobSkill { JobId = 1, SkillId = 6  },
+            new JobSkill { JobId = 1, SkillId = 7  },
+            new JobSkill { JobId = 1, SkillId = 23 },
+            new JobSkill { JobId = 1, SkillId = 22 },
+            new JobSkill { JobId = 1, SkillId = 20 },
+
+            // Job 2: Full Stack Developer -> JavaScript, TypeScript, React, Node.js, SQL, Git, REST API
+            new JobSkill { JobId = 2, SkillId = 4  },
+            new JobSkill { JobId = 2, SkillId = 5  },
+            new JobSkill { JobId = 2, SkillId = 10 },
+            new JobSkill { JobId = 2, SkillId = 13 },
+            new JobSkill { JobId = 2, SkillId = 6  },
+            new JobSkill { JobId = 2, SkillId = 22 },
+            new JobSkill { JobId = 2, SkillId = 23 },
+
+            // Job 3: Data Scientist -> Python, ML, DL, Data Analysis, Pandas, Scikit-learn, SQL
+            new JobSkill { JobId = 3, SkillId = 1  },
+            new JobSkill { JobId = 3, SkillId = 16 },
+            new JobSkill { JobId = 3, SkillId = 17 },
+            new JobSkill { JobId = 3, SkillId = 28 },
+            new JobSkill { JobId = 3, SkillId = 29 },
+            new JobSkill { JobId = 3, SkillId = 30 },
+            new JobSkill { JobId = 3, SkillId = 6  },
+
+            // Job 4: DevOps Engineer -> Docker, Kubernetes, AWS, Linux, Git
+            new JobSkill { JobId = 4, SkillId = 20 },
+            new JobSkill { JobId = 4, SkillId = 21 },
+            new JobSkill { JobId = 4, SkillId = 25 },
+            new JobSkill { JobId = 4, SkillId = 27 },
+            new JobSkill { JobId = 4, SkillId = 22 },
+
+            // Job 5: .NET Developer -> C#, .NET, ASP.NET Core, SQL, PostgreSQL, REST API, Git
+            new JobSkill { JobId = 5, SkillId = 3  },
+            new JobSkill { JobId = 5, SkillId = 14 },
+            new JobSkill { JobId = 5, SkillId = 15 },
+            new JobSkill { JobId = 5, SkillId = 6  },
+            new JobSkill { JobId = 5, SkillId = 7  },
+            new JobSkill { JobId = 5, SkillId = 23 },
+            new JobSkill { JobId = 5, SkillId = 22 },
+
+            // Job 6: Frontend React Developer -> JavaScript, TypeScript, React, Git
+            new JobSkill { JobId = 6, SkillId = 4  },
+            new JobSkill { JobId = 6, SkillId = 5  },
+            new JobSkill { JobId = 6, SkillId = 10 },
+            new JobSkill { JobId = 6, SkillId = 22 },
+
+            // Job 7: Database Administrator -> SQL, PostgreSQL, MySQL, MongoDB
+            new JobSkill { JobId = 7, SkillId = 6  },
+            new JobSkill { JobId = 7, SkillId = 7  },
+            new JobSkill { JobId = 7, SkillId = 8  },
+            new JobSkill { JobId = 7, SkillId = 9  },
+
+            // Job 8: ML Engineer -> Python, ML, TensorFlow, PyTorch, Docker, Git
+            new JobSkill { JobId = 8, SkillId = 1  },
+            new JobSkill { JobId = 8, SkillId = 16 },
+            new JobSkill { JobId = 8, SkillId = 18 },
+            new JobSkill { JobId = 8, SkillId = 19 },
+            new JobSkill { JobId = 8, SkillId = 20 },
+            new JobSkill { JobId = 8, SkillId = 22 },
+
+            // Job 9: Cloud Architect -> AWS, Azure, Docker, Kubernetes, Linux
+            new JobSkill { JobId = 9, SkillId = 25 },
+            new JobSkill { JobId = 9, SkillId = 26 },
+            new JobSkill { JobId = 9, SkillId = 20 },
+            new JobSkill { JobId = 9, SkillId = 21 },
+            new JobSkill { JobId = 9, SkillId = 27 },
+
+            // Job 10: Java Microservices -> Java, SQL, REST API, Docker, GraphQL, Git
+            new JobSkill { JobId = 10, SkillId = 2  },
+            new JobSkill { JobId = 10, SkillId = 6  },
+            new JobSkill { JobId = 10, SkillId = 23 },
+            new JobSkill { JobId = 10, SkillId = 20 },
+            new JobSkill { JobId = 10, SkillId = 24 },
+            new JobSkill { JobId = 10, SkillId = 22 }
+        );
+    }
+}
+
+--- END CODE ---------------------------------------------------------------
+
+
+================================================================================
+8. STEP 5 -- DTOs (Data Transfer Objects)
+================================================================================
+
+DTOs are simple classes used to shape the data we SEND BACK to the client.
+They are NOT stored in the database -- just containers for API responses.
+
+WHY USE DTOs?
+  We do not send raw database models to the user. DTOs let us pick exactly
+  which fields to include and add computed fields like "MatchScore".
+
+
+8a. DTOs/JobMatchRequest.cs -- INPUT for job matching
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.DTOs;
+
+public class JobMatchRequest
+{
+    public int ResumeId { get; set; }
+    public int TopN { get; set; } = 10;
+}
+--- END --------------------------------------------------------------------
+
+
+8b. DTOs/JobMatchResult.cs -- OUTPUT for each matched job
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.DTOs;
+
+public class JobMatchResult
+{
+    public int JobId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Company { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> RequiredSkills { get; set; } = new();
+    public List<string> MatchedSkills { get; set; } = new();
+    public List<string> MissingSkills { get; set; } = new();
+    public double MatchScore { get; set; }
+}
+--- END --------------------------------------------------------------------
+
+
+8c. DTOs/ResumeUploadResponse.cs -- OUTPUT after uploading resume
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.DTOs;
+
+public class ResumeUploadResponse
+{
+    public int ResumeId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public List<string> ExtractedSkills { get; set; } = new();
+    public int UserId { get; set; }
+}
+--- END --------------------------------------------------------------------
+
+
+8d. DTOs/SkillGapResult.cs -- OUTPUT of skill gap analysis
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.DTOs;
+
+public class SkillGapResult
+{
+    public int ResumeId { get; set; }
+    public int JobId { get; set; }
+    public string JobTitle { get; set; } = string.Empty;
+    public string Company { get; set; } = string.Empty;
+    public List<string> ResumeSkills { get; set; } = new();
+    public List<string> MatchedSkills { get; set; } = new();
+    public List<string> MissingSkills { get; set; } = new();
+    public double MatchScore { get; set; }
+}
+--- END --------------------------------------------------------------------
+
+
+8e. DTOs/ResourceResult.cs -- OUTPUT of learning resources
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.DTOs;
+
+public class ResourceResult
+{
+    public string Skill { get; set; } = string.Empty;
+    public List<ResourceLink> YouTubeLinks { get; set; } = new();
+    public List<ResourceLink> ArticleLinks { get; set; } = new();
+}
+
+public class ResourceLink
+{
+    public string Title { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+}
+--- END --------------------------------------------------------------------
+
+
+================================================================================
+9. STEP 6 -- SERVICE INTERFACES
+================================================================================
+
+Interfaces define WHAT a service can do, without saying HOW.
+This is "Dependency Injection": controllers depend on interfaces, not classes.
+
+9a. Services/IResumeParserService.cs
+--- COPY-PASTE CODE -------------------------------------------------------
+namespace ResumeAPI.Services;
+
+public interface IResumeParserService
+{
+    Task<string> ExtractTextAsync(IFormFile file);
+}
+--- END --------------------------------------------------------------------
+
+9b. Services/ISkillExtractorService.cs
+--- COPY-PASTE CODE -------------------------------------------------------
+using ResumeAPI.DTOs;
+namespace ResumeAPI.Services;
+
+public interface ISkillExtractorService
+{
+    Task<List<string>> ExtractSkillsAsync(string resumeText);
+}
+--- END --------------------------------------------------------------------
+
+9c. Services/IJobMatchService.cs
+--- COPY-PASTE CODE -------------------------------------------------------
+using ResumeAPI.DTOs;
+namespace ResumeAPI.Services;
+
+public interface IJobMatchService
+{
+    Task<List<JobMatchResult>> MatchAsync(List<string> resumeSkills, int topN = 10);
+}
+--- END --------------------------------------------------------------------
+
+9d. Services/ISkillGapService.cs
+--- COPY-PASTE CODE -------------------------------------------------------
+using ResumeAPI.DTOs;
+namespace ResumeAPI.Services;
+
+public interface ISkillGapService
+{
+    Task<SkillGapResult> GetGapAsync(int resumeId, int jobId);
+}
+--- END --------------------------------------------------------------------
+
+9e. Services/ILearningResourceService.cs
+--- COPY-PASTE CODE -------------------------------------------------------
+using ResumeAPI.DTOs;
+namespace ResumeAPI.Services;
+
+public interface ILearningResourceService
+{
+    Task<ResourceResult> GetResourcesAsync(string skill);
+}
+--- END --------------------------------------------------------------------
+
+
+================================================================================
+10. STEP 7 -- SERVICE IMPLEMENTATIONS (The Core Business Logic)
+================================================================================
+
+
+----------------------------------
+10a. Services/ResumeParserService.cs -- Extract text from PDF/DOCX files
+----------------------------------
+
+WHAT IT DOES:
+  Takes an uploaded file (IFormFile), reads its bytes into memory, and
+  extracts all the text from it.
+
+ALGORITHM:
+  1. Get the file extension (.pdf or .docx).
+  2. Copy file bytes into a MemoryStream.
+  3. If PDF  -> use the PdfPig library to open the PDF, loop through
+     each page, and append page.Text to a StringBuilder.
+  4. If DOCX -> use the OpenXml library to open the Word document,
+     find all Text elements in the document body, and join them.
+  5. If neither -> throw an error saying the format is not supported.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using UglyToad.PdfPig;
+using DocumentFormat.OpenXml.Packaging;
+using System.Text;
+
+namespace ResumeAPI.Services;
+
+public class ResumeParserService : IResumeParserService
+{
+    public async Task<string> ExtractTextAsync(IFormFile file)
+    {
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+        using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        stream.Position = 0;
+
+        return extension switch
+        {
+            ".pdf"  => ExtractFromPdf(stream),
+            ".docx" => ExtractFromDocx(stream),
+            _       => throw new NotSupportedException(
+                $"File type '{extension}' is not supported. Please upload a PDF or DOCX file.")
+        };
+    }
+
+    private static string ExtractFromPdf(Stream stream)
+    {
+        var sb = new StringBuilder();
+        using var pdf = PdfDocument.Open(stream);
+        foreach (var page in pdf.GetPages())
+        {
+            sb.AppendLine(page.Text);
+        }
+        return sb.ToString();
+    }
+
+    private static string ExtractFromDocx(Stream stream)
+    {
+        var sb = new StringBuilder();
+        using var doc = WordprocessingDocument.Open(stream, false);
+        var body = doc.MainDocumentPart?.Document?.Body;
+        if (body is null) return string.Empty;
+
+        foreach (var text in body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>())
+        {
+            sb.Append(text.Text).Append(' ');
+        }
+        return sb.ToString();
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+10b. Services/SkillExtractorService.cs -- Find skills in resume text
+----------------------------------
+
+WHAT IT DOES:
+  Searches the resume text for known skill names from the database.
+
+ALGORITHM:
+  1. Load ALL skill names from the Skills table in the database.
+  2. For each skill name, build a REGEX pattern with word boundaries.
+     Example: for "Python", the pattern is: (?<![a-zA-Z0-9])Python(?![a-zA-Z0-9])
+     This ensures "Python" matches but "PythonScript" does NOT.
+  3. Check if the resume text contains this pattern (case-insensitive).
+  4. If found, add the skill name to the "detected" list.
+  5. Return the list sorted alphabetically with duplicates removed.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Data;
+
+namespace ResumeAPI.Services;
+
+public class SkillExtractorService : ISkillExtractorService
+{
+    private readonly AppDbContext _db;
+
+    public SkillExtractorService(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task<List<string>> ExtractSkillsAsync(string resumeText)
+    {
+        var allSkills = await _db.Skills.Select(s => s.Name).ToListAsync();
+        var detected = new List<string>();
+
+        foreach (var skill in allSkills)
+        {
+            // Word-boundary aware, case-insensitive match
+            var pattern = @"(?<![a-zA-Z0-9])" + Regex.Escape(skill) + @"(?![a-zA-Z0-9])";
+            if (Regex.IsMatch(resumeText, pattern, RegexOptions.IgnoreCase))
+            {
+                detected.Add(skill);
+            }
+        }
+
+        return detected.Distinct().OrderBy(s => s).ToList();
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+10c. Services/JobMatchService.cs -- Match resume skills against all jobs
+----------------------------------
+
+WHAT IT DOES:
+  Compares a list of resume skills against every job in the database and
+  calculates a match percentage.
+
+ALGORITHM:
+  1. Normalize all resume skills to lowercase (for case-insensitive compare).
+  2. Load ALL jobs from the database, including their required skills
+     (using Include + ThenInclude for eager loading).
+  3. For each job:
+     a. Get required skill names.
+     b. Find MATCHED skills (skills in both resume AND job requirements).
+     c. Find MISSING skills (skills required by job but NOT in resume).
+     d. Calculate MatchScore = (matched count / required count) * 100.
+  4. Sort all results by MatchScore descending (best match first).
+  5. Return only the top N results.
+
+EXAMPLE:
+  Resume has: [Python, SQL, Git]
+  Job requires: [Python, SQL, Docker, REST API, Git, PostgreSQL]
+  Matched = [Python, SQL, Git] -> 3 skills
+  Missing = [Docker, REST API, PostgreSQL] -> 3 skills
+  Score = (3/6) * 100 = 50.00%
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Data;
+using ResumeAPI.DTOs;
+
+namespace ResumeAPI.Services;
+
+public class JobMatchService : IJobMatchService
+{
+    private readonly AppDbContext _db;
+
+    public JobMatchService(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task<List<JobMatchResult>> MatchAsync(List<string> resumeSkills, int topN = 10)
+    {
+        var normalizedResume = resumeSkills
+            .Select(s => s.ToLowerInvariant())
+            .ToHashSet();
+
+        var jobs = await _db.Jobs
+            .Include(j => j.JobSkills)
+                .ThenInclude(js => js.Skill)
+            .ToListAsync();
+
+        var results = new List<JobMatchResult>();
+
+        foreach (var job in jobs)
+        {
+            var required = job.JobSkills
+                .Select(js => js.Skill!.Name)
+                .ToList();
+
+            var matched = required
+                .Where(r => normalizedResume.Contains(r.ToLowerInvariant()))
+                .ToList();
+
+            var missing = required
+                .Where(r => !normalizedResume.Contains(r.ToLowerInvariant()))
+                .ToList();
+
+            double score = required.Count == 0
+                ? 0
+                : Math.Round((double)matched.Count / required.Count * 100, 2);
+
+            results.Add(new JobMatchResult
+            {
+                JobId          = job.Id,
+                Title          = job.Title,
+                Company        = job.Company,
+                Description    = job.Description,
+                RequiredSkills = required,
+                MatchedSkills  = matched,
+                MissingSkills  = missing,
+                MatchScore     = score
+            });
+        }
+
+        return results
+            .OrderByDescending(r => r.MatchScore)
+            .Take(topN)
+            .ToList();
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+10d. Services/SkillGapService.cs -- Compare resume vs specific job
+----------------------------------
+
+WHAT IT DOES:
+  Given a resume ID and a job ID, tells you exactly which skills you have,
+  which ones match the job, and which ones you are missing.
+
+ALGORITHM:
+  1. Find the resume by ID in the database (throw error if not found).
+  2. Find the job by ID, including its required skills (throw if not found).
+  3. Extract skills from the resume text using SkillExtractorService.
+  4. Normalize resume skills to lowercase for comparison.
+  5. Get the job's required skills.
+  6. Calculate matched = skills in BOTH resume and job requirements.
+  7. Calculate missing = skills in job requirements but NOT in resume.
+  8. Calculate MatchScore = (matched / required) * 100.
+  9. Return everything as a SkillGapResult.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Data;
+using ResumeAPI.DTOs;
+
+namespace ResumeAPI.Services;
+
+public class SkillGapService : ISkillGapService
+{
+    private readonly AppDbContext _db;
+    private readonly ISkillExtractorService _skillExtractor;
+
+    public SkillGapService(AppDbContext db, ISkillExtractorService skillExtractor)
+    {
+        _db = db;
+        _skillExtractor = skillExtractor;
+    }
+
+    public async Task<SkillGapResult> GetGapAsync(int resumeId, int jobId)
+    {
+        var resume = await _db.Resumes.FindAsync(resumeId)
+            ?? throw new KeyNotFoundException($"Resume with ID {resumeId} not found.");
+
+        var job = await _db.Jobs
+            .Include(j => j.JobSkills)
+                .ThenInclude(js => js.Skill)
+            .FirstOrDefaultAsync(j => j.Id == jobId)
+            ?? throw new KeyNotFoundException($"Job with ID {jobId} not found.");
+
+        var resumeSkills = await _skillExtractor.ExtractSkillsAsync(resume.RawText);
+        var resumeSkillsNorm = resumeSkills
+            .Select(s => s.ToLowerInvariant())
+            .ToHashSet();
+
+        var requiredSkills = job.JobSkills
+            .Select(js => js.Skill!.Name)
+            .ToList();
+
+        var matched = requiredSkills
+            .Where(r => resumeSkillsNorm.Contains(r.ToLowerInvariant()))
+            .ToList();
+
+        var missing = requiredSkills
+            .Where(r => !resumeSkillsNorm.Contains(r.ToLowerInvariant()))
+            .ToList();
+
+        double score = requiredSkills.Count == 0
+            ? 0
+            : Math.Round((double)matched.Count / requiredSkills.Count * 100, 2);
+
+        return new SkillGapResult
+        {
+            ResumeId      = resumeId,
+            JobId         = jobId,
+            JobTitle      = job.Title,
+            Company       = job.Company,
+            ResumeSkills  = resumeSkills,
+            MatchedSkills = matched,
+            MissingSkills = missing,
+            MatchScore    = score
+        };
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+10e. Services/LearningResourceService.cs -- Get learning links for a skill
+----------------------------------
+
+WHAT IT DOES:
+  For any given skill name, returns curated YouTube tutorials and article links.
+
+ALGORITHM:
+  1. Maintain a large static dictionary mapping skill names to resource links.
+     The dictionary uses case-insensitive keys.
+  2. When asked for resources for a skill:
+     a. Try to find the skill in the dictionary.
+     b. If found -> return the curated YouTube and article links.
+     c. If NOT found -> generate generic search URLs:
+        - YouTube search URL with the skill name
+        - Google search URL with the skill name
+        - MDN search URL with the skill name
+
+  The dictionary contains curated links for all 30 skills in the database.
+  Each skill has 3 YouTube links and 3 article links.
+
+NOTE: This file is ~460 lines because of all the curated links.
+      The code structure is simple -- it is just a big dictionary.
+      See the actual file: Services/LearningResourceService.cs
+
+--- KEY CODE STRUCTURE (simplified) ----------------------------------------
+using ResumeAPI.DTOs;
+
+namespace ResumeAPI.Services;
+
+public class LearningResourceService : ILearningResourceService
+{
+    private static readonly Dictionary<string, (List<ResourceLink> YouTube, List<ResourceLink> Articles)> _resources =
+        new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Python"] = (
+            new() {
+                new() { Title = "Python for Beginners", Url = "https://youtube.com/..." },
+                // ... more YouTube links
+            },
+            new() {
+                new() { Title = "Python Official Docs", Url = "https://docs.python.org/..." },
+                // ... more article links
+            }
+        ),
+        // ... similar entries for all 30 skills
+    };
+
+    public Task<ResourceResult> GetResourcesAsync(string skill)
+    {
+        var result = new ResourceResult { Skill = skill };
+
+        if (_resources.TryGetValue(skill, out var resources))
+        {
+            result.YouTubeLinks  = resources.YouTube;
+            result.ArticleLinks  = resources.Articles;
+        }
+        else
+        {
+            // Generic fallback for unknown skills
+            var encoded = Uri.EscapeDataString(skill);
+            result.YouTubeLinks = new List<ResourceLink>
+            {
+                new() { Title = $"{skill} Tutorial on YouTube",
+                        Url = $"https://www.youtube.com/results?search_query={encoded}+tutorial" }
+            };
+            result.ArticleLinks = new List<ResourceLink>
+            {
+                new() { Title = $"Search {skill} on Google",
+                        Url = $"https://www.google.com/search?q={encoded}+tutorial" },
+                new() { Title = $"{skill} on MDN / Docs",
+                        Url = $"https://developer.mozilla.org/en-US/search?q={encoded}" }
+            };
+        }
+
+        return Task.FromResult(result);
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+================================================================================
+11. STEP 8 -- API CONTROLLERS
+================================================================================
+
+Controllers define the HTTP endpoints (URLs) that clients can call.
+They receive requests, call the appropriate service, and return responses.
+
+Key concepts:
+  * [ApiController]         -> Tells ASP.NET this is an API controller.
+  * [Route("api/[controller]")] -> Base URL. [controller] is replaced by the
+                              class name minus "Controller".
+                              ResumeController -> /api/Resume
+  * [HttpPost], [HttpGet]  -> HTTP method for each endpoint.
+  * ActionResult<T>        -> Return type that can be Ok(data), NotFound(), etc.
+
+
+----------------------------------
+11a. Controllers/ResumeController.cs
+----------------------------------
+
+ENDPOINTS:
+  POST /api/Resume/upload    -> Upload a PDF/DOCX resume file
+  GET  /api/Resume/{id}/skills -> Get extracted skills for a resume
+  GET  /api/Resume           -> List all stored resumes
+
+LOGIC of Upload endpoint (the most complex one):
+  1. Validate: file is not null and not empty.
+  2. Validate: file extension is .pdf or .docx.
+  3. Ensure a User exists in the database (create default user if needed).
+  4. Call ResumeParserService to extract text from the file.
+  5. Save the resume (with extracted text) to the database.
+  6. Call SkillExtractorService to find skills in the text.
+  7. Return the resume ID, file name, and extracted skills.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Data;
+using ResumeAPI.DTOs;
+using ResumeAPI.Models;
+using ResumeAPI.Services;
+
+namespace ResumeAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ResumeController : ControllerBase
+{
+    private readonly AppDbContext _db;
+    private readonly IResumeParserService _parser;
+    private readonly ISkillExtractorService _extractor;
+
+    public ResumeController(AppDbContext db, IResumeParserService parser, ISkillExtractorService extractor)
+    {
+        _db        = db;
+        _parser    = parser;
+        _extractor = extractor;
+    }
+
+    [HttpPost("upload")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ResumeUploadResponse>> Upload(
+        IFormFile file,
+        [FromQuery] int userId = 1)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest("No file was uploaded.");
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext != ".pdf" && ext != ".docx")
+            return BadRequest("Only PDF and DOCX files are supported.");
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null)
+        {
+            user = new User { Id = userId, Name = "Default User", Email = "user@example.com" };
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+        }
+
+        string rawText;
+        try
+        {
+            rawText = await _parser.ExtractTextAsync(file);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest($"Failed to parse the file: {ex.Message}");
+        }
+
+        var resume = new Resume
+        {
+            UserId     = userId,
+            FileName   = file.FileName,
+            RawText    = rawText,
+            UploadedAt = DateTime.UtcNow
+        };
+
+        _db.Resumes.Add(resume);
+        await _db.SaveChangesAsync();
+
+        var skills = await _extractor.ExtractSkillsAsync(rawText);
+
+        return Ok(new ResumeUploadResponse
+        {
+            ResumeId        = resume.Id,
+            UserId          = userId,
+            FileName        = resume.FileName,
+            ExtractedSkills = skills
+        });
+    }
+
+    [HttpGet("{id}/skills")]
+    public async Task<ActionResult<List<string>>> GetSkills(int id)
+    {
+        var resume = await _db.Resumes.FindAsync(id);
+        if (resume is null)
+            return NotFound($"Resume with ID {id} not found.");
+
+        var skills = await _extractor.ExtractSkillsAsync(resume.RawText);
+        return Ok(skills);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<object>>> GetAll()
+    {
+        var resumes = await _db.Resumes
+            .Select(r => new { r.Id, r.UserId, r.FileName, r.UploadedAt })
+            .ToListAsync();
+        return Ok(resumes);
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+11b. Controllers/JobsController.cs
+----------------------------------
+
+ENDPOINTS:
+  POST /api/Jobs/match -> Match a resume against all jobs (send JSON body)
+  GET  /api/Jobs       -> List all available jobs with their required skills
+
+LOGIC of Match endpoint:
+  1. Find the resume by the given ResumeId.
+  2. Extract skills from the resume text.
+  3. Call JobMatchService.MatchAsync() to compare skills against all jobs.
+  4. Return ranked list of job matches.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ResumeAPI.Data;
+using ResumeAPI.DTOs;
+using ResumeAPI.Services;
+
+namespace ResumeAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class JobsController : ControllerBase
+{
+    private readonly AppDbContext _db;
+    private readonly IJobMatchService _matchService;
+    private readonly ISkillExtractorService _extractor;
+
+    public JobsController(AppDbContext db, IJobMatchService matchService, ISkillExtractorService extractor)
+    {
+        _db           = db;
+        _matchService  = matchService;
+        _extractor    = extractor;
+    }
+
+    [HttpPost("match")]
+    public async Task<ActionResult<List<JobMatchResult>>> Match([FromBody] JobMatchRequest request)
+    {
+        var resume = await _db.Resumes.FindAsync(request.ResumeId);
+        if (resume is null)
+            return NotFound($"Resume with ID {request.ResumeId} not found.");
+
+        var skills  = await _extractor.ExtractSkillsAsync(resume.RawText);
+        var results = await _matchService.MatchAsync(skills, request.TopN > 0 ? request.TopN : 10);
+        return Ok(results);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<object>>> GetAll()
+    {
+        var jobs = await _db.Jobs
+            .Include(j => j.JobSkills)
+                .ThenInclude(js => js.Skill)
+            .Select(j => new
+            {
+                j.Id,
+                j.Title,
+                j.Company,
+                j.Description,
+                RequiredSkills = j.JobSkills.Select(js => js.Skill!.Name).ToList()
+            })
+            .ToListAsync();
+
+        return Ok(jobs);
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+11c. Controllers/SkillGapController.cs
+----------------------------------
+
+ENDPOINT:
+  GET /api/skill-gap?resumeId=1&jobId=5 -> Compare resume skills vs job skills
+
+LOGIC:
+  1. Call SkillGapService.GetGapAsync() with the resume and job IDs.
+  2. If either ID is not found, return 404.
+  3. Otherwise return the skill gap analysis.
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using ResumeAPI.DTOs;
+using ResumeAPI.Services;
+
+namespace ResumeAPI.Controllers;
+
+[ApiController]
+[Route("api/skill-gap")]
+public class SkillGapController : ControllerBase
+{
+    private readonly ISkillGapService _skillGapService;
+
+    public SkillGapController(ISkillGapService skillGapService)
+    {
+        _skillGapService = skillGapService;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<SkillGapResult>> GetSkillGap(
+        [FromQuery] int resumeId,
+        [FromQuery] int jobId)
+    {
+        try
+        {
+            var result = await _skillGapService.GetGapAsync(resumeId, jobId);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+----------------------------------
+11d. Controllers/ResourcesController.cs
+----------------------------------
+
+ENDPOINTS:
+  GET /api/Resources/{skill}          -> Get YouTube and article links for a skill
+  GET /api/Resources/supported-skills -> List all skills with curated resources
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using ResumeAPI.DTOs;
+using ResumeAPI.Services;
+
+namespace ResumeAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class ResourcesController : ControllerBase
+{
+    private readonly ILearningResourceService _resourceService;
+
+    public ResourcesController(ILearningResourceService resourceService)
+    {
+        _resourceService = resourceService;
+    }
+
+    [HttpGet("{skill}")]
+    public async Task<ActionResult<ResourceResult>> GetResources(string skill)
+    {
+        if (string.IsNullOrWhiteSpace(skill))
+            return BadRequest("Skill name is required.");
+
+        var result = await _resourceService.GetResourcesAsync(skill);
+        return Ok(result);
+    }
+
+    [HttpGet("supported-skills")]
+    public IActionResult GetSupportedSkills()
+    {
+        var skills = new[]
+        {
+            "Python", "Java", "C#", "JavaScript", "TypeScript",
+            "SQL", "PostgreSQL", "MySQL", "MongoDB",
+            "React", "Angular", "Vue", "Node.js",
+            ".NET", "ASP.NET Core",
+            "Machine Learning", "Deep Learning", "TensorFlow", "PyTorch",
+            "Docker", "Kubernetes", "Git",
+            "REST API", "GraphQL",
+            "AWS", "Azure", "Linux",
+            "Data Analysis", "Pandas", "Scikit-learn"
+        };
+        return Ok(skills);
+    }
+}
+--- END --------------------------------------------------------------------
+
+
+================================================================================
+12. STEP 9 -- APPLICATION ENTRY POINT (Program.cs)
+================================================================================
+
+WHAT IT DOES:
+  This is the FIRST file that runs when you start the application.
+  It configures everything: database, services, Swagger, CORS, and starts
+  the web server.
+
+LINE-BY-LINE LOGIC:
+
+  Lines 1-4:   Import namespaces.
+  Line 6:      Create the application builder.
+  Lines 9-10:  Register the database context with PostgreSQL connection string.
+  Lines 13-17: Register all 5 services using Dependency Injection (DI).
+               "AddScoped" means: create ONE instance per HTTP request.
+  Line 20:     Register MVC controllers.
+  Lines 23-32: Configure Swagger (auto-generates API docs page).
+  Lines 35-39: Configure CORS to allow requests from any origin.
+  Line 41:     Build the app.
+  Lines 44-48: Auto-apply database migrations on startup.
+               This creates/updates tables automatically.
+  Lines 51-58: In Development mode, enable Swagger UI at the root URL (/).
+  Lines 61-64: Add middleware: CORS, HTTPS redirect, auth, and map controllers.
+  Line 66:     Start listening for HTTP requests!
+
+--- COPY-PASTE CODE -------------------------------------------------------
+using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
+using ResumeAPI.Data;
+using ResumeAPI.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// --- Database ---
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// --- Application Services ---
+builder.Services.AddScoped<IResumeParserService, ResumeParserService>();
+builder.Services.AddScoped<ISkillExtractorService, SkillExtractorService>();
+builder.Services.AddScoped<IJobMatchService, JobMatchService>();
+builder.Services.AddScoped<ISkillGapService, SkillGapService>();
+builder.Services.AddScoped<ILearningResourceService, LearningResourceService>();
+
+// --- Controllers ---
+builder.Services.AddControllers();
+
+// --- Swagger / OpenAPI ---
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "Smart Resume Matcher API",
+        Version     = "v1",
+        Description = "Upload resumes, extract skills, match jobs, detect skill gaps, and get learning resources."
+    });
+});
+
+// --- CORS ---
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader()));
+
+var app = builder.Build();
+
+// --- Apply EF Migrations on Startup ---
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
+// --- Middleware Pipeline ---
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Resume Matcher API v1");
+        c.RoutePrefix = string.Empty; // Serve Swagger at root /
+    });
+}
+
+app.UseCors();
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+--- END --------------------------------------------------------------------
+
+
+================================================================================
+13. HOW EVERYTHING CONNECTS (The Big Picture)
+================================================================================
+
+Here is the complete flow when a user interacts with the API:
+
+  +----------------------------------------------------------------------+
+  | FLOW 1: Upload Resume                                                |
+  |                                                                      |
+  | Client sends PDF/DOCX file                                           |
+  |    -> POST /api/Resume/upload                                        |
+  |    -> ResumeController.Upload()                                      |
+  |        -> ResumeParserService.ExtractTextAsync() -> gets raw text    |
+  |        -> Saves Resume to database                                   |
+  |        -> SkillExtractorService.ExtractSkillsAsync() -> finds skills |
+  |    -> Returns: { resumeId, fileName, extractedSkills }               |
+  +----------------------------------------------------------------------+
+
+  +----------------------------------------------------------------------+
+  | FLOW 2: Match Jobs                                                   |
+  |                                                                      |
+  | Client sends { "resumeId": 1, "topN": 5 }                           |
+  |    -> POST /api/Jobs/match                                           |
+  |    -> JobsController.Match()                                         |
+  |        -> Finds resume in DB                                         |
+  |        -> SkillExtractorService -> extracts skills from resume text  |
+  |        -> JobMatchService.MatchAsync() -> compares vs all jobs       |
+  |    -> Returns: ranked list of jobs with match scores                 |
+  +----------------------------------------------------------------------+
+
+  +----------------------------------------------------------------------+
+  | FLOW 3: Skill Gap Analysis                                           |
+  |                                                                      |
+  | Client sends ?resumeId=1&jobId=5                                     |
+  |    -> GET /api/skill-gap?resumeId=1&jobId=5                          |
+  |    -> SkillGapController.GetSkillGap()                               |
+  |        -> SkillGapService.GetGapAsync()                              |
+  |            -> Finds resume and job in DB                             |
+  |            -> Extracts resume skills                                 |
+  |            -> Compares vs job's required skills                      |
+  |    -> Returns: { matchedSkills, missingSkills, matchScore }          |
+  +----------------------------------------------------------------------+
+
+  +----------------------------------------------------------------------+
+  | FLOW 4: Get Learning Resources                                       |
+  |                                                                      |
+  | Client requests -> GET /api/Resources/Python                         |
+  |    -> ResourcesController.GetResources("Python")                     |
+  |        -> LearningResourceService.GetResourcesAsync("Python")        |
+  |            -> Looks up "Python" in the curated dictionary            |
+  |    -> Returns: { youtubeLinks: [...], articleLinks: [...] }          |
+  +----------------------------------------------------------------------+
+
+
+DEPENDENCY INJECTION SUMMARY:
+  Program.cs registers these mappings:
+    IResumeParserService      -> ResumeParserService
+    ISkillExtractorService    -> SkillExtractorService
+    IJobMatchService          -> JobMatchService
+    ISkillGapService          -> SkillGapService
+    ILearningResourceService  -> LearningResourceService
+
+  When a controller asks for IResumeParserService in its constructor,
+  ASP.NET automatically creates a ResumeParserService and passes it in.
+
+
+DATABASE RELATIONSHIPS:
+    User (1) -------- (many) Resume
+    Job  (many) ----- (many) Skill   (via JobSkill join table)
+
+
+================================================================================
+14. HOW TO RUN THE PROJECT
+================================================================================
+
+STEP 1: Install Prerequisites
+  - .NET 8 SDK
+  - PostgreSQL (create a database or let EF Core create it)
+
+STEP 2: Clone/Copy the project
+  Copy all files to a folder called "ResumeAPI".
+
+STEP 3: Update the connection string
+  Edit appsettings.json -> change Username and Password to YOUR PostgreSQL
+  credentials.
+
+STEP 4: Create the initial migration (first time only)
+  Open a terminal in the ResumeAPI folder and run:
+    dotnet ef migrations add InitialCreate
+
+STEP 5: Run the application
+    dotnet run
+
+  The app will:
+    1. Start the web server.
+    2. Automatically apply migrations (create/update database tables).
+    3. Seed the database with 30 skills and 10 jobs.
+    4. Open Swagger UI at http://localhost:5000 (or the URL shown in console).
+
+STEP 6: Test with Swagger UI
+  Open your browser to the URL shown in the console.
+  You will see all endpoints listed. You can:
+    1. Upload a resume file via POST /api/Resume/upload.
+    2. Match it against jobs via POST /api/Jobs/match.
+    3. Check skill gaps via GET /api/skill-gap?resumeId=1&jobId=1.
+    4. Get learning resources via GET /api/Resources/Python.
+
+
+================================================================================
+                     END OF BACKEND CODE EXPLANATION
+================================================================================
+
+Remember: The full LearningResourceService.cs file contains curated links for
+all 30 skills. Copy it from the actual project file since it is too long to
+reproduce entirely here. The structure shown in section 10e is the same --
+just with all 30 skill entries filled in.
+
+Good luck building and understanding the Smart Resume Matcher API!

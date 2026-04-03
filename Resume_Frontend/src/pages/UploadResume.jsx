@@ -1,0 +1,342 @@
+// This page handles the uploading of the user's resume and job description.
+// It is kept simple and professional for job seekers.
+import { useNavigate } from 'react-router-dom';
+import UploadBox from '../components/UploadBox';
+import PrimaryButton from '../components/PrimaryButton';
+import ATSTerminal from '../components/ATSTerminal';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { runAnalysis } from '../services/api';
+import DotPatternBackground from '../components/DotPatternBackground';
+import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+
+const UploadResume = () => {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const { logout } = useAuth();
+  
+  const [isUploading, setIsUploading] = useState(false);
+  const [resumeUploaded, setResumeUploaded] = useState(false);
+  const [jobDescription, setJobDescription] = useState('');
+  const [roleTitle, setRoleTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [experienceLevel, setExperienceLevel] = useState('');
+  
+  // Store the resumeId and extractedSkills returned by the backend after upload
+  const [resumeId, setResumeId] = useState(null);
+  const [extractedSkills, setExtractedSkills] = useState([]);
+  const [blockedResponse, setBlockedResponse] = useState(null);
+
+  // Called when the resume PDF/DOCX is successfully uploaded and processed by the backend.
+  // The UploadBox component passes back response.data from the API call.
+  const handleUploadSuccess = (uploadData) => {
+    setResumeUploaded(true);
+    setIsUploading(false);
+    // Store the resumeId so we can use it in the job match call
+    if (uploadData && uploadData.resumeId) {
+      setResumeId(uploadData.resumeId);
+      setExtractedSkills(uploadData.extractedSkills || []);
+    }
+    showToast('Resume processed successfully. AI models ready for matching.', 'success');
+  };
+
+  const handleUploadError = (errData) => {
+    if (errData?.action === 'blocked' || errData?.action === 'force_logout') {
+      setBlockedResponse(errData);
+    }
+  };
+
+  const handleUploadStart = () => setIsUploading(true);
+  const handleUploadEnd = () => setIsUploading(false);
+
+  // Called when user clicks the final "Execute Semantic Analysis" button
+  const handleAnalyze = async () => {
+    if (!resumeUploaded) {
+      showToast('Please upload your resume first.', 'error');
+      return;
+    }
+    if (!roleTitle.trim()) {
+      showToast('Please enter the target role title.', 'error');
+      return;
+    }
+    if (!jobDescription.trim()) {
+      showToast('Please paste the job description.', 'error');
+      return;
+    }
+
+    if (!resumeId) {
+      showToast('Resume processing incomplete. Please try uploading again.', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Show the hacker terminal animation for 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Call the unified backend endpoint
+      const payload = {
+        resumeId: resumeId,
+        jobDescriptionText: jobDescription,
+        roleTitle: roleTitle,
+        companyName: companyName,
+        experienceLevel: experienceLevel
+      };
+      
+      const response = await runAnalysis(payload);
+      const analysisResult = response.data; // This is AnalysisResultDto
+
+      // Inject UI-specific states we captured so Dashboard can display them immediately
+      analysisResult.roleTitle = roleTitle;
+      analysisResult.companyName = companyName;
+
+      // Save for LearningHub and Dashboard fallback
+      localStorage.setItem('lastAnalysis', JSON.stringify(analysisResult));
+
+      showToast('Semantic matching complete. Redirecting to analysis...', 'info');
+      navigate('/dashboard', { state: analysisResult });
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+        showToast('Cannot connect to the backend server (localhost:5006). Please start the API.', 'error');
+      } else {
+        const backendError = error.response?.data?.error;
+        showToast(backendError || 'Analysis encountered an error. Please try again.', 'error');
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+
+  // Handle enforced blocked state from Moderation System
+  useEffect(() => {
+    if (blockedResponse?.action === 'force_logout') {
+      logout();
+    }
+  }, [blockedResponse, logout]);
+
+  // Show a loading screen while analyzing
+  if (isUploading && resumeUploaded) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 transition-colors duration-700">
+        <DotPatternBackground />
+        <div className="relative z-10 w-full max-w-4xl mx-auto space-y-8 animate-in fade-in zoom-in duration-700">
+           <div className="text-center space-y-2">
+              <h2 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter italic">Bypassing Standard Filters</h2>
+              <p className="text-slate-500 text-sm font-medium">Please wait while the neural engine constructs your semantic profile.</p>
+           </div>
+           <ATSTerminal />
+        </div>
+      </div>
+    );
+  }
+
+  if (blockedResponse) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 transition-colors duration-700">
+        <DotPatternBackground />
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="relative z-10 max-w-lg w-full bg-white dark:bg-slate-900 border-2 border-red-500/50 rounded-[32px] p-8 shadow-2xl space-y-6 text-center"
+        >
+          <div className="mx-auto w-20 h-20 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-500 rounded-full flex items-center justify-center mb-6">
+            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tighter italic">
+            {blockedResponse.action === 'force_logout' ? 'Account Suspended' : 'Upload Blocked'}
+          </h2>
+          <p className="text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-500/10 p-4 rounded-2xl border border-red-200 dark:border-red-500/20">
+            {blockedResponse.error}
+          </p>
+          <p className="text-slate-600 dark:text-slate-400 text-sm font-medium px-4">
+            Our systems detected a policy violation. Abusive, inappropriate, or non-resume content was submitted. This event has been logged.
+          </p>
+          
+          <PrimaryButton 
+            onClick={() => {
+              if (blockedResponse.action === 'force_logout') {
+                navigate('/login');
+              } else {
+                setBlockedResponse(null);
+              }
+            }} 
+            className="w-full mt-4 !bg-slate-800 hover:!bg-slate-700 dark:!bg-slate-100 dark:hover:!bg-slate-300 dark:text-slate-900 outline-none border-none ring-0 focus:ring-0 active:outline-none"
+          >
+            {blockedResponse.action === 'force_logout' ? 'Return to Login' : 'Understand & Retry'}
+          </PrimaryButton>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden pb-20 bg-slate-50 dark:bg-slate-950 transition-colors duration-700">
+      {/* Professional subtle background */}
+      <DotPatternBackground />
+
+      <div className="relative z-10 pt-24 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-6xl mx-auto w-full"
+        >
+          {/* Main Title Section */}
+          <div className="text-center mb-16 space-y-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="inline-block px-4 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-black uppercase tracking-[0.3em]"
+            >
+              Step into the Future of Careers
+            </motion.div>
+            <h1 className="text-5xl md:text-7xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter italic uppercase">
+              Match <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-400">Intelligence</span>
+            </h1>
+            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto font-medium">
+              Our neural engine analyzes your resume against job requirements with 99% accuracy. Upload to begin.
+            </p>
+          </div>
+
+          {/* Core Input Areas */}
+          <div className="grid md:grid-cols-2 gap-12 mb-16 items-stretch">
+            {/* 1. Resume Upload Box */}
+            <motion.div
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="h-full flex flex-col group"
+            >
+              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 mb-4 ml-2 uppercase tracking-widest italic opacity-60 group-hover:opacity-100 transition-opacity">01. Neural Resume Input</h3>
+              <div className="flex-grow bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[32px] border border-slate-200 dark:border-white/5 shadow-2xl dark:shadow-none p-8 flex flex-col justify-center transition-all duration-500 group-hover:border-blue-500/30">
+                <UploadBox
+                  onUploadSuccess={handleUploadSuccess}
+                  onUploadStart={handleUploadStart}
+                  onUploadEnd={handleUploadEnd}
+                  onUploadError={handleUploadError}
+                  onDragOver={() => {}} 
+                />
+                {resumeUploaded && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-6 p-4 bg-emerald-500/10 dark:bg-green-900/20 rounded-2xl text-emerald-600 dark:text-green-400 font-black text-xs uppercase tracking-widest text-center border border-emerald-500/20"
+                  >
+                    ✓ Data Extracted Successfully
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* 2. Job Description Text Box */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="h-full flex flex-col group"
+            >
+              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 mb-4 ml-2 uppercase tracking-widest italic opacity-60 group-hover:opacity-100 transition-opacity">02. Target Job Pattern</h3>
+              <div className="flex-grow bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[32px] border border-slate-200 dark:border-white/5 shadow-2xl dark:shadow-none p-4 relative overflow-hidden transition-all duration-500 group-hover:border-blue-500/30">
+                
+                {/* 🚀 AI Scanner Effect Triggered by Text Input */}
+                {jobDescription.trim().length > 0 && !isUploading && (
+                  <div className="absolute inset-0 pointer-events-none z-20">
+                    <motion.div
+                      className="absolute left-0 right-0 h-40 bg-gradient-to-b from-transparent via-blue-500/10 to-transparent border-b-2 border-blue-400 shadow-[0_5px_30px_rgba(59,130,246,0.3)]"
+                      animate={{
+                        top: ['-40%', '100%']
+                      }}
+                      transition={{
+                        duration: 3,
+                        ease: "linear",
+                        repeat: Infinity,
+                        repeatType: "loop"
+                      }}
+                    />
+                    {/* Pulsing AI Analysis Badge */}
+                    <div className="absolute top-4 right-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase flex items-center gap-2 backdrop-blur-sm">
+                      <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
+                      Pattern Mapping
+                    </div>
+                  </div>
+                )}
+                
+                <textarea
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Paste the target requirements here..."
+                  disabled={isUploading}
+                  className="w-full h-full min-h-[300px] bg-transparent border-none rounded-xl p-6 text-slate-800 dark:text-white focus:outline-none resize-none text-lg relative z-10 font-medium placeholder:text-slate-400 placeholder:italic"
+                />
+              </div>
+
+              {/* 🚀 New Metadata Inputs (Role, Company, Exp) */}
+              <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Target Role (Required)</label>
+                   <input
+                    type="text"
+                    required
+                    value={roleTitle}
+                    onChange={(e) => setRoleTitle(e.target.value)}
+                    placeholder="e.g. Senior Frontend Engineer"
+                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium"
+                   />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Company Name (Optional)</label>
+                   <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="e.g. Google, Microsoft"
+                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium"
+                   />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Experience Level</label>
+                   <select
+                    value={experienceLevel}
+                    onChange={(e) => setExperienceLevel(e.target.value)}
+                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium appearance-none"
+                   >
+                     <option value="">Not Specified</option>
+                     <option value="Entry Level">Entry Level</option>
+                     <option value="Mid Level">Mid Level</option>
+                     <option value="Senior Level">Senior Level</option>
+                     <option value="Lead / Principal">Lead / Principal</option>
+                   </select>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Action Button Section */}
+          <div className="flex flex-col items-center justify-center w-full mt-8">
+            <PrimaryButton
+              onClick={handleAnalyze}
+              disabled={!jobDescription.trim() || !resumeUploaded || !roleTitle.trim() || isUploading}
+              className={`px-16 py-5 w-full max-w-[450px] shadow-2xl transition-opacity ${
+                (!jobDescription.trim() || !resumeUploaded || !roleTitle.trim()) ? 'opacity-40 cursor-not-allowed' : ''
+              }`}
+            >
+              🚀 Execute Semantic Analysis
+            </PrimaryButton>
+            
+            {/* Message shown when form is incomplete */}
+            {(!jobDescription.trim() || !resumeUploaded || !roleTitle.trim()) && (
+               <div className="mt-3 text-[10px] font-black text-center text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] italic">
+                   {!resumeUploaded ? 'Upload your resume to begin' : !roleTitle.trim() ? 'Enter a target role title' : 'Paste the job description'}
+               </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+
+  );
+};
+
+export default UploadResume;
