@@ -9,8 +9,19 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// Handle Railway/Heroku PostgreSQL URIs (e.g. postgresql://user:pass@host:port/db)
+if (connectionString != null && (connectionString.StartsWith("postgres://") || connectionString.StartsWith("postgresql://")))
+{
+    var databaseUri = new Uri(connectionString);
+    var userInfo = databaseUri.UserInfo.Split(':');
+    
+    connectionString = $"Host={databaseUri.Host};Port={databaseUri.Port};Database={databaseUri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // Application Services
 builder.Services.AddMemoryCache();
