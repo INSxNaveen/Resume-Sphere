@@ -9,6 +9,11 @@ RUN npm install
 
 # Copy source and build
 COPY . .
+
+# Capture the API URL from Railway environment at build time
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build
 
 # Production stage
