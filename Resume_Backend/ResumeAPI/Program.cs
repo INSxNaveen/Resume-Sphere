@@ -93,17 +93,18 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS
+// CORS — hardcoded Vercel URL + any extra origin from Railway env var
 var allowedOrigins = new List<string>
 {
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
-    "http://127.0.0.1:5174"
+    "http://127.0.0.1:5174",
+    "https://resume-sphere-ecru.vercel.app"   // ← your deployed Vercel frontend
 };
 
 var frontendUrl = builder.Configuration["Frontend:Url"];
-if (!string.IsNullOrWhiteSpace(frontendUrl))
+if (!string.IsNullOrWhiteSpace(frontendUrl) && !allowedOrigins.Contains(frontendUrl))
 {
     allowedOrigins.Add(frontendUrl);
 }
@@ -118,22 +119,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 var app = builder.Build();
 
-// Swagger only in development
-if (app.Environment.IsDevelopment())
+// Swagger in ALL environments so you can test the deployed backend
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Resume Matcher API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Resume Matcher API v1");
+    c.RoutePrefix = "swagger";
+});
 
+// CORS must come before Authentication/Authorization
 app.UseCors();
-
-// app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
