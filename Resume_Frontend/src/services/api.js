@@ -1,11 +1,10 @@
 // Axios is HTTP client library for making requests to backend server
 import axios from 'axios';
 
-// Backend server URL - Update this if backend runs on different port/address
-// THE BACKEND RUNS ON PORT 5006 WITH /api prefix.
-const API_BASE_URL = import.meta.env.VITE_API_URL='resume-sphere-production-094e.up.railway.app/api';
+// Backend server URL - Provide this via .env or hosting environment
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5006/api';
+
 // Create axios instance with base configuration
-// Allows us to make requests without repeating base URL in each call
 const api = axios.create({
   baseURL: API_BASE_URL,
 });

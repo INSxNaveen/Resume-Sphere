@@ -93,20 +93,21 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS — hardcoded Vercel URL + any extra origin from Railway env var
+// CORS — includes localhost for development and the configured Frontend:Url for production
 var allowedOrigins = new List<string>
 {
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
-    "https://resume-sphere-ecru.vercel.app"   // ← your deployed Vercel frontend
 };
 
 var frontendUrl = builder.Configuration["Frontend:Url"];
-if (!string.IsNullOrWhiteSpace(frontendUrl) && !allowedOrigins.Contains(frontendUrl))
+if (!string.IsNullOrWhiteSpace(frontendUrl))
 {
-    allowedOrigins.Add(frontendUrl);
+    // Ensure both variants (with and without trailing slash) are allowed
+    var cleanUrl = frontendUrl.TrimEnd('/');
+    if (!allowedOrigins.Contains(cleanUrl)) allowedOrigins.Add(cleanUrl);
 }
 
 builder.Services.AddCors(options =>
@@ -140,5 +141,26 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Automatic Migration
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+        if (context.Database.GetPendingMigrations().Any())
+        {
+            Console.WriteLine("Applying pending migrations...");
+            context.Database.Migrate();
+            Console.WriteLine("Migrations applied successfully.");
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
 
 app.Run();
