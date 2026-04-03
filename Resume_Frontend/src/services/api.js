@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Backend server URL - Update this if backend runs on different port/address
 // THE BACKEND RUNS ON PORT 5006 WITH /api prefix.
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5006/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL='resume-sphere-production-094e.up.railway.app';
 // Create axios instance with base configuration
 // Allows us to make requests without repeating base URL in each call
 const api = axios.create({
