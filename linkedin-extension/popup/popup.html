@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume-Sphere</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- State A: Logged Out -->
+  <div id="logged-out-view" class="view">
+    <div class="header">
+      <div class="logo-group">
+        <span class="logo-icon">▲</span>
+        <h1 class="logo-text">Resume-Sphere</h1>
+      </div>
+    </div>
+    <div class="main-content">
+      <p class="subtitle">Score and Apply with AI power.</p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="name@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" id="loginBtn" class="btn-primary">Sign In</button>
+        <p id="loginError" class="error-msg"></p>
+      </form>
+      <div class="footer-note">
+        <a href="https://resume-sphere.vercel.app/" target="_blank">Don't have an account? Visit Resume-Sphere</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- State B: Logged In -->
+  <div id="logged-in-view" class="view hidden">
+    <div class="header user-header">
+      <div class="avatar" id="userInitial">JD</div>
+      <div class="user-info">
+        <h2 id="userName">User Name</h2>
+      </div>
+      <button id="logoutBtn" class="btn-icon">Logout</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toggle-row">
+      <span class="label">Auto-Apply</span>
+      <label class="switch">
+        <input type="checkbox" id="autoApplyToggle">
+        <span class="slider round"></span>
+      </label>
+    </div>
+
+    <div class="threshold-row">
+      <div class="label-group">
+        <span class="label">Min Match Score</span>
+        <span id="thresholdValue" class="value">70%</span>
+      </div>
+      <input type="range" id="thresholdSlider" min="0" max="95" step="5" value="70">
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="count" id="statApplied">--</div>
+        <div class="label">Applied</div>
+      </div>
+      <div class="stat-card">
+        <div class="count" id="statWeek">--</div>
+        <div class="label">This Week</div>
+      </div>
+      <div class="stat-card">
+        <div class="count" id="statAvg">--%</div>
+        <div class="label">Avg Score</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div id="statusText" class="status-text">Ready to score jobs.</div>
+
+    <div class="footer">
+      <a href="http://localhost:5173/history" target="_blank" id="viewFullHistory" class="history-link">View Full History</a>
+      <a href="#" id="toggleSettings">Extension Settings</a>
+    </div>
+
+    <!-- Inline Settings Panel -->
+    <div id="settingsPanel" class="settings-panel">
+      <div class="form-group">
+        <label for="dotnetUrl">.NET API URL</label>
+        <input type="text" id="dotnetUrl" placeholder="http://localhost:5000">
+      </div>
+      <div class="form-group">
+        <label for="aiUrl">AI Service URL</label>
+        <input type="text" id="aiUrl" placeholder="http://localhost:8000">
+      </div>
+      <button id="saveSettingsBtn" class="btn-primary" style="margin-top: 8px;">Save Settings</button>
+      <button id="testConnectionBtn" class="btn-secondary" style="margin-top: 8px; width: 100%;">Test Connection</button>
+      <div id="connectionStatus" style="display:none; margin-top: 6px; font-size: 12px;"></div>
+    </div>
+
+    <!-- Feedback & Status -->
+    <div id="errorDetail" style="display:none; margin: 12px 16px; padding: 8px 12px; font-size: 11px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; color: #f87171; border-radius: 4px;"></div>
+    
+    <div id="lastSync" style="font-size: 10px; color: #64748b; padding: 0 16px 12px; text-align: right;"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResumeAPI", "ResumeAPI\ResumeAPI.csproj", "{2683AA65-38A2-7990-46DC-4B36227661F8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ResumeWeb", "ResumeWeb\ResumeWeb.csproj", "{6ED9BD63-65D4-2663-9976-0DB74A390875}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2683AA65-38A2-7990-46DC-4B36227661F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2683AA65-38A2-7990-46DC-4B36227661F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2683AA65-38A2-7990-46DC-4B36227661F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2683AA65-38A2-7990-46DC-4B36227661F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6ED9BD63-65D4-2663-9976-0DB74A390875}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6ED9BD63-65D4-2663-9976-0DB74A390875}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6ED9BD63-65D4-2663-9976-0DB74A390875}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6ED9BD63-65D4-2663-9976-0DB74A390875}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A53A9DA0-FF17-43BE-B1A1-871B58E4A7C3}
+	EndGlobalSection
+EndGlobal
