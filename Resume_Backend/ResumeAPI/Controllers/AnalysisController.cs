@@ -75,6 +75,25 @@ public class AnalysisController : ControllerBase
         }
     }
 
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteAnalysis(Guid id)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var success = await _analysisService.DeleteAnalysisAsync(userId, id);
+
+            if (!success) return NotFound(new { error = "Analysis not found or could not be deleted." });
+
+            return Ok(new { message = "Analysis deleted successfully." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting analysis");
+            return StatusCode(500, new { error = "An error occurred while deleting the analysis." });
+        }
+    }
+
     private Guid GetUserId()
     {
         var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

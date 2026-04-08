@@ -52,10 +52,10 @@ public class LearningPlanService : ILearningPlanService
             return new LearningPlanItemDto
             {
                 SkillName = rec.SkillName,
-                Priority = rec.Priority,
+                Priority = string.IsNullOrWhiteSpace(rec.Priority) ? "medium" : rec.Priority.ToLowerInvariant(),
                 // WhyItMatters from AI output — stored at analysis time
                 WhyItMatters = string.IsNullOrWhiteSpace(rec.WhyItMatters)
-                    ? $"Required for the target role based on the job description analysis."
+                    ? $"Learning {rec.SkillName} improves eligibility for stronger roles based on your current resume."
                     : rec.WhyItMatters,
                 Difficulty = rec.Difficulty,
                 EstimatedHours = rec.EstimatedHours > 0 ? rec.EstimatedHours : 15,

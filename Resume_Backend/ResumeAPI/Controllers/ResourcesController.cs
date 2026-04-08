@@ -17,7 +17,7 @@ public class ResourcesController : ControllerBase
 
     /// <summary>
     /// Get YouTube tutorial links and article links for a given skill.
-    /// Useful for learning missing skills identified in a skill gap analysis.
+    /// Useful for learning skills identified by the resume analysis.
     /// </summary>
     [HttpGet("{skill}")]
     public async Task<ActionResult<ResourceResult>> GetResources(string skill)

@@ -1,5 +1,4 @@
 using ResumeAPI.DTOs;
-using ResumeAPI.Helpers;
 
 namespace ResumeAPI.Services;
 
@@ -431,12 +430,44 @@ public class LearningResourceService : ILearningResourceService
         )
     };
 
+    private static readonly Dictionary<string, string> _skillDescriptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "Python", "A versatile programming language used widely in backend APIs, data science, and AI." },
+        { "JavaScript", "The core scripting language of the web, enabling interactive frontend and Node.js applications." },
+        { "TypeScript", "A strict syntactical superset of JavaScript that adds static typing to guarantee structural safety." },
+        { "C#", "A modern, object-oriented language developed by Microsoft for the highly performant .NET ecosystem." },
+        { "Java", "A high-level, class-based, object-oriented language heavily used in large enterprise backends." },
+        { "React", "A declarative, efficient component-based UI library for building dynamic single-page web apps." },
+        { "Angular", "A comprehensive app-design platform containing a component-based framework for scalable web apps." },
+        { "Vue", "An approachable, performant, and versatile framework for building web user interfaces." },
+        { "Node.js", "An asynchronous event-driven JavaScript runtime designed to build scalable network applications." },
+        { "ASP.NET Core", "A cross-platform, high-performance, open-source framework for modern cloud-based apps." },
+        { "SQL", "The standard language for relational database management and data manipulation." },
+        { "PostgreSQL", "A powerful, open source object-relational database system with massive enterprise reliability." },
+        { "MongoDB", "A highly scalable, document-oriented NoSQL database program." },
+        { "Docker", "An OS-level virtualization platform used to deliver software in standardized isolated containers." },
+        { "Kubernetes", "An open-source system for automating deployment, scaling, and management of containerized applications." },
+        { "Git", "A distributed version control system for tracking changes in source code during software development." },
+        { "Machine Learning", "A branch of AI focusing on using data and algorithms to imitate the way humans learn." },
+        { "Deep Learning", "A subset of ML based on artificial neural networks with multiple layers of processing." },
+        { "REST API", "An architectural style for an application program interface that uses HTTP requests to access and use data." },
+        { "GraphQL", "A query language for APIs and a runtime for fulfilling those queries with existing data." },
+        { "Data Analysis", "The process of systematically applying statistical and logical techniques to describe data." }
+    };
+
+    private static string GetSkillSummary(string skill)
+    {
+        return _skillDescriptions.TryGetValue(skill, out var desc)
+            ? desc
+            : $"A technical competency commonly sought in modern software development environments.";
+    }
+
     public Task<ResourceResult> GetResourcesAsync(string skill)
     {
         var result = new ResourceResult 
         { 
             Skill = skill,
-            Summary = SkillEnricher.Enrich(skill, "Software Professional").Explanation
+            Summary = GetSkillSummary(skill)
         };
 
         if (_resources.TryGetValue(skill, out var resources))

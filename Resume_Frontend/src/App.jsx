@@ -11,7 +11,7 @@ import ScrollToTop from './components/ScrollToTop';
 // Import ThemeProvider for global light/dark mode management
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -21,11 +21,14 @@ const Register = lazy(() => import('./pages/Register'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const AnalysisHistory = lazy(() => import('./pages/AnalysisHistory'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
+const AuthenticatedHome = lazy(() => import('./pages/AuthenticatedHome'));
 const UploadResume = lazy(() => import('./pages/UploadResume'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LearningHub = lazy(() => import('./pages/LearningHub'));
 const InterviewPrep = lazy(() => import('./pages/InterviewPrep'));
 const SkillDetail = lazy(() => import('./pages/SkillDetail'));
+const SearchJobs = lazy(() => import('./pages/SearchJobs'));
+const CompanyDetails = lazy(() => import('./pages/CompanyDetails'));
 
 /**
  * LoadingFallback - Minimal component to show during chunk loading
@@ -36,6 +39,17 @@ const LoadingFallback = () => (
     <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
   </div>
 );
+
+/**
+ * AuthAwareHome - Resolves route "/" to proper home experience.
+ */
+const AuthAwareHome = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) return <LoadingFallback />;
+  
+  return isAuthenticated ? <AuthenticatedHome /> : <LandingPage />;
+};
 
 /**
  * AppContent Component 
@@ -67,14 +81,14 @@ function AppContent() {
               <Route path="/" element={
                  <div className="relative w-full h-full min-h-screen">
                     <motion.div 
-                      key="landing"
+                      key="home"
                       className="w-full h-full"
                       initial={{ opacity: 0, y: 15 }} 
                       animate={{ opacity: 1, y: 0 }} 
                       exit={{ opacity: 0, y: -15, position: 'absolute', top: 0, left: 0, right: 0 }} 
                       transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
                     >
-                      <LandingPage />
+                      <AuthAwareHome />
                     </motion.div>
                  </div>
               } />
@@ -214,6 +228,36 @@ function AppContent() {
                       transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
                     >
                       <SkillDetail />
+                    </motion.div>
+                </div>
+              } />
+
+              <Route path="/jobs" element={
+                <div className="relative w-full h-full min-h-screen">
+                    <motion.div 
+                      key="jobs"
+                      className="w-full h-full"
+                      initial={{ opacity: 0, y: 15 }} 
+                      animate={{ opacity: 1, y: 0 }} 
+                      exit={{ opacity: 0, y: -15, position: 'absolute', top: 0, left: 0, right: 0 }} 
+                      transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                    >
+                      <SearchJobs />
+                    </motion.div>
+                </div>
+              } />
+
+              <Route path="/companies/:name" element={
+                <div className="relative w-full h-full min-h-screen">
+                    <motion.div 
+                      key="company"
+                      className="w-full h-full"
+                      initial={{ opacity: 0, y: 15 }} 
+                      animate={{ opacity: 1, y: 0 }} 
+                      exit={{ opacity: 0, y: -15, position: 'absolute', top: 0, left: 0, right: 0 }} 
+                      transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                    >
+                      <CompanyDetails />
                     </motion.div>
                 </div>
               } />

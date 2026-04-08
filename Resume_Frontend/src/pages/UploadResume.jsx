@@ -1,4 +1,4 @@
-// This page handles the uploading of the user's resume and job description.
+// This page handles the uploading of the user's resume for semantic analysis.
 // It is kept simple and professional for job seekers.
 import { useNavigate } from 'react-router-dom';
 import UploadBox from '../components/UploadBox';
@@ -18,10 +18,6 @@ const UploadResume = () => {
   
   const [isUploading, setIsUploading] = useState(false);
   const [resumeUploaded, setResumeUploaded] = useState(false);
-  const [jobDescription, setJobDescription] = useState('');
-  const [roleTitle, setRoleTitle] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [experienceLevel, setExperienceLevel] = useState('');
   
   // Store the resumeId and extractedSkills returned by the backend after upload
   const [resumeId, setResumeId] = useState(null);
@@ -56,14 +52,6 @@ const UploadResume = () => {
       showToast('Please upload your resume first.', 'error');
       return;
     }
-    if (!roleTitle.trim()) {
-      showToast('Please enter the target role title.', 'error');
-      return;
-    }
-    if (!jobDescription.trim()) {
-      showToast('Please paste the job description.', 'error');
-      return;
-    }
 
     if (!resumeId) {
       showToast('Resume processing incomplete. Please try uploading again.', 'error');
@@ -78,18 +66,10 @@ const UploadResume = () => {
       // Call the unified backend endpoint
       const payload = {
         resumeId: resumeId,
-        jobDescriptionText: jobDescription,
-        roleTitle: roleTitle,
-        companyName: companyName,
-        experienceLevel: experienceLevel
       };
       
       const response = await runAnalysis(payload);
       const analysisResult = response.data; // This is AnalysisResultDto
-
-      // Inject UI-specific states we captured so Dashboard can display them immediately
-      analysisResult.roleTitle = roleTitle;
-      analysisResult.companyName = companyName;
 
       // Save for LearningHub and Dashboard fallback
       localStorage.setItem('lastAnalysis', JSON.stringify(analysisResult));
@@ -99,7 +79,8 @@ const UploadResume = () => {
     } catch (error) {
       console.error('Analysis failed:', error);
       if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
-        showToast('Cannot connect to the backend server (localhost:5006). Please start the API.', 'error');
+        const dotnetUrl = 'http://localhost:5000';
+        showToast(`Cannot connect to the backend server (${dotnetUrl}). Please start the API.`, 'error');
       } else {
         const backendError = error.response?.data?.error;
         showToast(backendError || 'Analysis encountered an error. Please try again.', 'error');
@@ -203,12 +184,12 @@ const UploadResume = () => {
           </div>
 
           {/* Core Input Areas */}
-          <div className="grid md:grid-cols-2 gap-12 mb-16 items-stretch">
+          <div className="flex justify-center mb-16 items-stretch">
             {/* 1. Resume Upload Box */}
             <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="h-full flex flex-col group"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="h-full flex flex-col group w-full max-w-lg"
             >
               <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 mb-4 ml-2 uppercase tracking-widest italic opacity-60 group-hover:opacity-100 transition-opacity">01. Neural Resume Input</h3>
               <div className="flex-grow bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[32px] border border-slate-200 dark:border-white/5 shadow-2xl dark:shadow-none p-8 flex flex-col justify-center transition-all duration-500 group-hover:border-blue-500/30">
@@ -230,105 +211,24 @@ const UploadResume = () => {
                 )}
               </div>
             </motion.div>
-
-            {/* 2. Job Description Text Box */}
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="h-full flex flex-col group"
-            >
-              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 mb-4 ml-2 uppercase tracking-widest italic opacity-60 group-hover:opacity-100 transition-opacity">02. Target Job Pattern</h3>
-              <div className="flex-grow bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[32px] border border-slate-200 dark:border-white/5 shadow-2xl dark:shadow-none p-4 relative overflow-hidden transition-all duration-500 group-hover:border-blue-500/30">
-                
-                {/* 🚀 AI Scanner Effect Triggered by Text Input */}
-                {jobDescription.trim().length > 0 && !isUploading && (
-                  <div className="absolute inset-0 pointer-events-none z-20">
-                    <motion.div
-                      className="absolute left-0 right-0 h-40 bg-gradient-to-b from-transparent via-blue-500/10 to-transparent border-b-2 border-blue-400 shadow-[0_5px_30px_rgba(59,130,246,0.3)]"
-                      animate={{
-                        top: ['-40%', '100%']
-                      }}
-                      transition={{
-                        duration: 3,
-                        ease: "linear",
-                        repeat: Infinity,
-                        repeatType: "loop"
-                      }}
-                    />
-                    {/* Pulsing AI Analysis Badge */}
-                    <div className="absolute top-4 right-4 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase flex items-center gap-2 backdrop-blur-sm">
-                      <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
-                      Pattern Mapping
-                    </div>
-                  </div>
-                )}
-                
-                <textarea
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  placeholder="Paste the target requirements here..."
-                  disabled={isUploading}
-                  className="w-full h-full min-h-[300px] bg-transparent border-none rounded-xl p-6 text-slate-800 dark:text-white focus:outline-none resize-none text-lg relative z-10 font-medium placeholder:text-slate-400 placeholder:italic"
-                />
-              </div>
-
-              {/* 🚀 New Metadata Inputs (Role, Company, Exp) */}
-              <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Target Role (Required)</label>
-                   <input
-                    type="text"
-                    required
-                    value={roleTitle}
-                    onChange={(e) => setRoleTitle(e.target.value)}
-                    placeholder="e.g. Senior Frontend Engineer"
-                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium"
-                   />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Company Name (Optional)</label>
-                   <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="e.g. Google, Microsoft"
-                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium"
-                   />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-2">Experience Level</label>
-                   <select
-                    value={experienceLevel}
-                    onChange={(e) => setExperienceLevel(e.target.value)}
-                    className="w-full bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl px-6 py-4 text-slate-800 dark:text-white focus:outline-none focus:border-blue-500/50 transition-all font-medium appearance-none"
-                   >
-                     <option value="">Not Specified</option>
-                     <option value="Entry Level">Entry Level</option>
-                     <option value="Mid Level">Mid Level</option>
-                     <option value="Senior Level">Senior Level</option>
-                     <option value="Lead / Principal">Lead / Principal</option>
-                   </select>
-                </div>
-              </div>
-            </motion.div>
           </div>
 
           {/* Action Button Section */}
           <div className="flex flex-col items-center justify-center w-full mt-8">
             <PrimaryButton
               onClick={handleAnalyze}
-              disabled={!jobDescription.trim() || !resumeUploaded || !roleTitle.trim() || isUploading}
+              disabled={!resumeUploaded || isUploading}
               className={`px-16 py-5 w-full max-w-[450px] shadow-2xl transition-opacity ${
-                (!jobDescription.trim() || !resumeUploaded || !roleTitle.trim()) ? 'opacity-40 cursor-not-allowed' : ''
+                (!resumeUploaded) ? 'opacity-40 cursor-not-allowed' : ''
               }`}
             >
               🚀 Execute Semantic Analysis
             </PrimaryButton>
             
             {/* Message shown when form is incomplete */}
-            {(!jobDescription.trim() || !resumeUploaded || !roleTitle.trim()) && (
+            {(!resumeUploaded) && (
                <div className="mt-3 text-[10px] font-black text-center text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] italic">
-                   {!resumeUploaded ? 'Upload your resume to begin' : !roleTitle.trim() ? 'Enter a target role title' : 'Paste the job description'}
+                   Upload your resume to begin
                </div>
             )}
           </div>

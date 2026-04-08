@@ -10,16 +10,11 @@ public class AppDbContext : DbContext
     // ── Core Tables ────────────────────────────────────────────────────────────
     public DbSet<User> Users => Set<User>();
     public DbSet<Resume> Resumes => Set<Resume>();
-    public DbSet<JobDescription> JobDescriptions => Set<JobDescription>();
     public DbSet<Analysis> Analyses => Set<Analysis>();
 
     // ── Skill Extraction ───────────────────────────────────────────────────────
     public DbSet<ResumeExtractedSkill> ResumeExtractedSkills => Set<ResumeExtractedSkill>();
-    public DbSet<JobDescriptionExtractedSkill> JobDescriptionExtractedSkills => Set<JobDescriptionExtractedSkill>();
-
     // ── Analysis Outputs ───────────────────────────────────────────────────────
-    public DbSet<AnalysisMissingSkill> AnalysisMissingSkills => Set<AnalysisMissingSkill>();
-    public DbSet<AnalysisMissingKeyword> AnalysisMissingKeywords => Set<AnalysisMissingKeyword>();
     public DbSet<AnalysisSuggestion> AnalysisSuggestions => Set<AnalysisSuggestion>();
 
     // ── Learning & Progress ────────────────────────────────────────────────────
@@ -31,15 +26,13 @@ public class AppDbContext : DbContext
     public DbSet<GeneratedResume> GeneratedResumes => Set<GeneratedResume>();
     public DbSet<AnalysisHistory> AnalysisHistories => Set<AnalysisHistory>();
 
-    // ── Legacy (kept for backward compat, not part of new feature set) ─────────
-    public DbSet<Skill> Skills => Set<Skill>();
-    public DbSet<Job> Jobs => Set<Job>();
-    public DbSet<JobSkill> JobSkills => Set<JobSkill>();
-
     // ── Moderation & Abuse ─────────────────────────────────────────────────────
     public DbSet<UploadModerationEvent> UploadModerationEvents => Set<UploadModerationEvent>();
     public DbSet<BlockedDevice> BlockedDevices => Set<BlockedDevice>();
     public DbSet<BlockedIp> BlockedIps => Set<BlockedIp>();
+
+    // ── Career Management ──────────────────────────────────────────────────────
+    public DbSet<JobApplication> JobApplications => Set<JobApplication>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -89,48 +82,20 @@ public class AppDbContext : DbContext
         });
 
         // ══════════════════════════════════════════════════════════════════════════
-        // JOB DESCRIPTION
-        // ══════════════════════════════════════════════════════════════════════════
-        modelBuilder.Entity<JobDescription>(entity =>
-        {
-            entity.HasKey(jd => jd.Id);
-
-            entity.Property(jd => jd.RoleTitle).IsRequired().HasMaxLength(256);
-            entity.Property(jd => jd.CompanyName).HasMaxLength(256);
-            entity.Property(jd => jd.ExperienceLevel).HasMaxLength(128);
-            entity.Property(jd => jd.CreatedAt).HasDefaultValueSql("NOW()");
-
-            entity.HasOne(jd => jd.User)
-                .WithMany(u => u.JobDescriptions)
-                .HasForeignKey(jd => jd.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ══════════════════════════════════════════════════════════════════════════
         // ANALYSIS
-        // DATA RULE 6: Always linked to both ResumeId and JobDescriptionId
-        // DATA RULE 4: ScoreBreakdownJson stored as JSONB — never recomputed on load
         // ══════════════════════════════════════════════════════════════════════════
         modelBuilder.Entity<Analysis>(entity =>
         {
             entity.HasKey(a => a.Id);
-
-            entity.Property(a => a.OverallScore).HasColumnType("decimal(5,2)");
             entity.Property(a => a.Status).IsRequired().HasMaxLength(32);
             entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
 
-            // DATA RULE 4 — JSON columns stored as PostgreSQL JSONB
-            entity.Property(a => a.ScoreBreakdownJson)
-                .HasColumnType("jsonb")
-                .HasDefaultValue("{}");
+            entity.Property(a => a.CurrentSkillsJson).HasColumnType("jsonb").HasDefaultValue("[]");
+            entity.Property(a => a.EligibleJobsJson).HasColumnType("jsonb").HasDefaultValue("[]");
+            entity.Property(a => a.ImprovementSuggestionsJson).HasColumnType("jsonb").HasDefaultValue("[]");
+            entity.Property(a => a.UnlockedOpportunitiesJson).HasColumnType("jsonb").HasDefaultValue("[]");
 
-            entity.Property(a => a.DeductionReasonsJson)
-                .HasColumnType("jsonb")
-                .HasDefaultValue("[]");
-
-            // DATA RULE 6 — Required FKs
             entity.Property(a => a.ResumeId).IsRequired();
-            entity.Property(a => a.JobDescriptionId).IsRequired();
 
             entity.HasOne(a => a.User)
                 .WithMany(u => u.Analyses)
@@ -140,11 +105,6 @@ public class AppDbContext : DbContext
             entity.HasOne(a => a.Resume)
                 .WithMany(r => r.Analyses)
                 .HasForeignKey(a => a.ResumeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(a => a.JobDescription)
-                .WithMany(jd => jd.Analyses)
-                .HasForeignKey(a => a.JobDescriptionId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -172,57 +132,9 @@ public class AppDbContext : DbContext
         });
 
         // ══════════════════════════════════════════════════════════════════════════
-        // JOB DESCRIPTION EXTRACTED SKILLS
-        // ══════════════════════════════════════════════════════════════════════════
-        modelBuilder.Entity<JobDescriptionExtractedSkill>(entity =>
-        {
-            entity.HasKey(s => s.Id);
-
-            entity.Property(s => s.SkillName).IsRequired().HasMaxLength(256);
-            entity.Property(s => s.Priority).HasMaxLength(32);
-
-            entity.HasOne(s => s.JobDescription)
-                .WithMany(jd => jd.ExtractedSkills)
-                .HasForeignKey(s => s.JobDescriptionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(s => s.Analysis)
-                .WithMany(a => a.JdExtractedSkills)
-                .HasForeignKey(s => s.AnalysisId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ══════════════════════════════════════════════════════════════════════════
         // ANALYSIS MISSING SKILLS
+        // (Removing legacy config)
         // ══════════════════════════════════════════════════════════════════════════
-        modelBuilder.Entity<AnalysisMissingSkill>(entity =>
-        {
-            entity.HasKey(s => s.Id);
-
-            entity.Property(s => s.SkillName).IsRequired().HasMaxLength(256);
-            entity.Property(s => s.Priority).HasMaxLength(32);
-            entity.Property(s => s.Decision).HasMaxLength(32);
-
-            entity.HasOne(s => s.Analysis)
-                .WithMany(a => a.MissingSkills)
-                .HasForeignKey(s => s.AnalysisId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ══════════════════════════════════════════════════════════════════════════
-        // ANALYSIS MISSING KEYWORDS
-        // ══════════════════════════════════════════════════════════════════════════
-        modelBuilder.Entity<AnalysisMissingKeyword>(entity =>
-        {
-            entity.HasKey(k => k.Id);
-
-            entity.Property(k => k.Keyword).IsRequired().HasMaxLength(256);
-
-            entity.HasOne(k => k.Analysis)
-                .WithMany(a => a.MissingKeywords)
-                .HasForeignKey(k => k.AnalysisId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
 
         // ══════════════════════════════════════════════════════════════════════════
         // ANALYSIS SUGGESTIONS
@@ -354,26 +266,6 @@ public class AppDbContext : DbContext
         });
 
         // ══════════════════════════════════════════════════════════════════════════
-        // LEGACY — Skill / Job / JobSkill (kept for backward compat, no seed data)
-        // ══════════════════════════════════════════════════════════════════════════
-        modelBuilder.Entity<JobSkill>()
-            .HasKey(js => new { js.JobId, js.SkillId });
-
-        modelBuilder.Entity<JobSkill>()
-            .HasOne(js => js.Job)
-            .WithMany(j => j.JobSkills)
-            .HasForeignKey(js => js.JobId);
-
-        modelBuilder.Entity<JobSkill>()
-            .HasOne(js => js.Skill)
-            .WithMany(s => s.JobSkills)
-            .HasForeignKey(js => js.SkillId);
-
-        modelBuilder.Entity<Skill>()
-            .HasIndex(s => s.Name)
-            .IsUnique();
-
-        // ══════════════════════════════════════════════════════════════════════════
         // MODERATION & ABUSE
         // ══════════════════════════════════════════════════════════════════════════
         modelBuilder.Entity<UploadModerationEvent>(entity =>
@@ -399,6 +291,21 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.IpAddress).IsUnique();
+        });
+
+        // ══════════════════════════════════════════════════════════════════════════
+        // JOB APPLICATIONS
+        // ══════════════════════════════════════════════════════════════════════════
+        modelBuilder.Entity<JobApplication>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            
+            entity.HasOne(a => a.User)
+                .WithMany() // User model doesn't have a collection yet, keeping it additive
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.Property(a => a.AppliedAt).HasDefaultValueSql("NOW()");
         });
     }
 }

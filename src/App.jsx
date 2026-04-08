@@ -24,6 +24,7 @@ const SkillDetail = lazy(() => import('./pages/SkillDetail'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ApplicationsDashboard = lazy(() => import('./pages/ApplicationsDashboard'));
 
 /**
  * LoadingFallback - Minimal component to show during chunk loading
@@ -197,6 +198,23 @@ function AppContent() {
                       <SkillDetail />
                     </motion.div>
                 </div>
+              } />
+              
+              <Route path="/applications" element={
+                <ProtectedRoute>
+                  <div className="relative w-full h-full min-h-full">
+                      <motion.div 
+                        key="applications"
+                        className="w-full h-full"
+                        initial={{ opacity: 0, y: 15 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        exit={{ opacity: 0, y: -15, position: 'absolute', top: 0, left: 0, right: 0 }} 
+                        transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                      >
+                        <ApplicationsDashboard />
+                      </motion.div>
+                  </div>
+                </ProtectedRoute>
               } />
               
               {/* Catch-all redirect to Home */}

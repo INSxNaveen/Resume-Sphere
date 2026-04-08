@@ -33,38 +33,42 @@ namespace ResumeAPI.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW()");
 
-                    b.Property<string>("DeductionReasonsJson")
+                    b.Property<string>("CurrentSkillsJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasDefaultValue("[]");
 
-                    b.Property<Guid>("JobDescriptionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("OverallScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<Guid>("ResumeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ScoreBreakdownJson")
+                    b.Property<string>("EligibleJobsJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
-                        .HasDefaultValue("{}");
+                        .HasDefaultValue("[]");
+
+                    b.Property<string>("ImprovementSuggestionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]");
+
+                    b.Property<Guid>("ResumeId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("UnlockedOpportunitiesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("JobDescriptionId");
 
                     b.HasIndex("ResumeId");
 
@@ -106,66 +110,6 @@ namespace ResumeAPI.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("AnalysisHistories");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.AnalysisMissingKeyword", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AnalysisId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Context")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Keyword")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AnalysisId");
-
-                    b.ToTable("AnalysisMissingKeywords");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.AnalysisMissingSkill", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AnalysisId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Decision")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("SkillName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("WhyItMatters")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AnalysisId");
-
-                    b.ToTable("AnalysisMissingSkills");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.AnalysisSuggestion", b =>
@@ -365,62 +309,37 @@ namespace ResumeAPI.Migrations
                     b.ToTable("GeneratedResumes");
                 });
 
-            modelBuilder.Entity("ResumeAPI.Models.Job", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Company")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Jobs");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobDescription", b =>
+            modelBuilder.Entity("ResumeAPI.Models.JobApplication", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CompanyName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime>("AppliedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW()");
 
-                    b.Property<string>("ExperienceLevel")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("NormalizedText")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RawText")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RoleTitle")
+                    b.Property<string>("CompanyName")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("JobTitle")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("LinkedInJobUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<decimal>("MatchScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -429,59 +348,7 @@ namespace ResumeAPI.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("JobDescriptions");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobDescriptionExtractedSkill", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AnalysisId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("JobDescriptionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("KeywordFrequency")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("SkillName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AnalysisId");
-
-                    b.HasIndex("JobDescriptionId");
-
-                    b.ToTable("JobDescriptionExtractedSkills");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobSkill", b =>
-                {
-                    b.Property<int>("JobId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SkillId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsCore")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("JobId", "SkillId");
-
-                    b.HasIndex("SkillId");
-
-                    b.ToTable("JobSkills");
+                    b.ToTable("JobApplications");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.Resume", b =>
@@ -555,26 +422,6 @@ namespace ResumeAPI.Migrations
                     b.HasIndex("ResumeId");
 
                     b.ToTable("ResumeExtractedSkills");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.Skill", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("Skills");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.UploadModerationEvent", b =>
@@ -670,6 +517,11 @@ namespace ResumeAPI.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTime?>("SuspendedUntil")
                         .HasColumnType("timestamp with time zone");
 
@@ -751,12 +603,6 @@ namespace ResumeAPI.Migrations
 
             modelBuilder.Entity("ResumeAPI.Models.Analysis", b =>
                 {
-                    b.HasOne("ResumeAPI.Models.JobDescription", "JobDescription")
-                        .WithMany("Analyses")
-                        .HasForeignKey("JobDescriptionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("ResumeAPI.Models.Resume", "Resume")
                         .WithMany("Analyses")
                         .HasForeignKey("ResumeId")
@@ -768,8 +614,6 @@ namespace ResumeAPI.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("JobDescription");
 
                     b.Navigation("Resume");
 
@@ -793,28 +637,6 @@ namespace ResumeAPI.Migrations
                     b.Navigation("Analysis");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.AnalysisMissingKeyword", b =>
-                {
-                    b.HasOne("ResumeAPI.Models.Analysis", "Analysis")
-                        .WithMany("MissingKeywords")
-                        .HasForeignKey("AnalysisId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Analysis");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.AnalysisMissingSkill", b =>
-                {
-                    b.HasOne("ResumeAPI.Models.Analysis", "Analysis")
-                        .WithMany("MissingSkills")
-                        .HasForeignKey("AnalysisId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Analysis");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.AnalysisSuggestion", b =>
@@ -858,53 +680,15 @@ namespace ResumeAPI.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("ResumeAPI.Models.JobDescription", b =>
+            modelBuilder.Entity("ResumeAPI.Models.JobApplication", b =>
                 {
                     b.HasOne("ResumeAPI.Models.User", "User")
-                        .WithMany("JobDescriptions")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobDescriptionExtractedSkill", b =>
-                {
-                    b.HasOne("ResumeAPI.Models.Analysis", "Analysis")
-                        .WithMany("JdExtractedSkills")
-                        .HasForeignKey("AnalysisId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResumeAPI.Models.JobDescription", "JobDescription")
-                        .WithMany("ExtractedSkills")
-                        .HasForeignKey("JobDescriptionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Analysis");
-
-                    b.Navigation("JobDescription");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobSkill", b =>
-                {
-                    b.HasOne("ResumeAPI.Models.Job", "Job")
-                        .WithMany("JobSkills")
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResumeAPI.Models.Skill", "Skill")
-                        .WithMany("JobSkills")
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Job");
-
-                    b.Navigation("Skill");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.Resume", b =>
@@ -993,12 +777,6 @@ namespace ResumeAPI.Migrations
 
                     b.Navigation("GeneratedResumes");
 
-                    b.Navigation("JdExtractedSkills");
-
-                    b.Navigation("MissingKeywords");
-
-                    b.Navigation("MissingSkills");
-
                     b.Navigation("ResumeExtractedSkills");
 
                     b.Navigation("Suggestions");
@@ -1011,28 +789,11 @@ namespace ResumeAPI.Migrations
                     b.Navigation("UserSelections");
                 });
 
-            modelBuilder.Entity("ResumeAPI.Models.Job", b =>
-                {
-                    b.Navigation("JobSkills");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.JobDescription", b =>
-                {
-                    b.Navigation("Analyses");
-
-                    b.Navigation("ExtractedSkills");
-                });
-
             modelBuilder.Entity("ResumeAPI.Models.Resume", b =>
                 {
                     b.Navigation("Analyses");
 
                     b.Navigation("ExtractedSkills");
-                });
-
-            modelBuilder.Entity("ResumeAPI.Models.Skill", b =>
-                {
-                    b.Navigation("JobSkills");
                 });
 
             modelBuilder.Entity("ResumeAPI.Models.User", b =>
@@ -1046,8 +807,6 @@ namespace ResumeAPI.Migrations
                     b.Navigation("CourseSelections");
 
                     b.Navigation("GeneratedResumes");
-
-                    b.Navigation("JobDescriptions");
 
                     b.Navigation("ModerationEvents");
 

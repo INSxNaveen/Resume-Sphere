@@ -208,7 +208,7 @@ else:
     print("Skipping DB fix (psycopg2 not installed)")
 
 # ─── Step 2: API Tests ────────────────────────────────────────────────────────
-BASE_URL = "http://localhost:5006"
+BASE_URL = "http://localhost:5000"
 TIMEOUT  = 15
 passed = failed = 0
 

@@ -73,11 +73,12 @@ const Navbar = () => {
           
           {/* Center - Navigation links */}
           <div className="hidden md:flex items-center bg-slate-100/50 dark:bg-white/5 p-1 rounded-2xl backdrop-blur-md border border-slate-200/50 dark:border-white/5">
-            <NavLink to="/">Home</NavLink>
+            <NavLink to="/">{isAuthenticated ? 'Dashboard' : 'Home'}</NavLink>
             <NavLink to="/upload">Upload</NavLink>
-            <NavLink to="/history">History</NavLink>
-            <NavLink to="/dashboard">Result</NavLink>
-            <NavLink to="/learning-hub">Learning</NavLink>
+            {isAuthenticated && <NavLink to="/jobs">Find Jobs</NavLink>}
+            {isAuthenticated && <NavLink to="/history">History</NavLink>}
+            <NavLink to="/learning-hub">Learning Hub</NavLink>
+            <NavLink to="/interview-prep">Interview</NavLink>
           </div>
 
           {/* Right side - Auth & Theme toggle */}

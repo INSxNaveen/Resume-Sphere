@@ -2,8 +2,9 @@
 import axios from 'axios';
 
 // Backend server URL - Update this if backend runs on different port/address
-// THE BACKEND RUNS ON PORT 5006 WITH /api prefix.
-const API_BASE_URL = import.meta.env.VITE_API_URL='resume-sphere-production-094e.up.railway.app/api';
+// THE BACKEND RUNS ON PORT 5000 WITH /api prefix.
+const API_BASE_URL = 'http://localhost:5000/api';
+
 // Create axios instance with base configuration
 // Allows us to make requests without repeating base URL in each call
 const api = axios.create({
@@ -20,6 +21,22 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle 401 Unauthorized globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Clear stale tokens (e.g. after database drop) and redirect
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   }
 );
@@ -51,19 +68,6 @@ export const uploadResume = async (file) => {
 };
 
 /**
- * Calculate Match Score Between Resume and Job Description
- * Called from: JobDescription page after user enters job description
- * Processing: AI model compares resume skills with job requirements
- * Returns: Match percentage (0-100%) and skill analysis
- * @param {string} jobDescription - Full job description text from user input
- * @returns {Promise} - Match score, matched skills, missing skills array
- */
-export const matchJobs = async (jobDescription) => {
-  return await api.post('/jobs/match', { jobDescription });
-};
-
-
-/**
  * Get Recommended Learning Resources for a skill
  */
 export const getResourcesForSkill = async (skill) => {
@@ -73,13 +77,6 @@ export const getResourcesForSkill = async (skill) => {
   return await api.get('/resources/supported-skills');
 };
 
-/**
- * Generate a Tailored Resume
- * @param {Object} data - { analysisId, targetJobTitle, targetCompanyName }
- */
-export const generateTailoredResume = async (data) => {
-  return await api.post('/resume/generate-tailored', data);
-};
 
 /**
  * Get personalized learning plan based on analysis
@@ -138,7 +135,7 @@ export const verifyOtp = async (email, otp, newPassword) => {
 
 /**
  * Run Semantic Analysis
- * @param {Object} payload - { resumeId, jobDescriptionText, roleTitle, companyName, experienceLevel }
+ * @param {Object} payload - { resumeId }
  */
 export const runAnalysis = async (payload) => {
   return await api.post('/analysis/run', payload);
@@ -158,6 +155,43 @@ export const getAnalysis = async (id) => {
  */
 export const getAnalysisHistory = async () => {
   return await api.get('/analysis/history');
+};
+
+/**
+ * Delete Analysis Record
+ * @param {string} id - Analysis ID to delete
+ */
+export const deleteAnalysis = async (id) => {
+  return await api.delete(`/analysis/${id}`);
+};
+
+/**
+ * Get Dashboard Summary
+ * @returns {Promise} - Aggregated dashboard data including user profile and latest analysis
+ */
+export const getDashboardSummary = async () => {
+  return await api.get('/dashboard/summary');
+};
+
+/**
+ * Search Jobs (Real-time Adzuna data)
+ */
+export const searchJobs = async (query, category) => {
+  return await api.get('/jobs/search', { params: { q: query, category } });
+};
+
+/**
+ * Get Featured Companies
+ */
+export const getCompanies = async (category) => {
+  return await api.get('/companies', { params: { category } });
+};
+
+/**
+ * Get Company Details
+ */
+export const getCompanyDetails = async (name) => {
+  return await api.get(`/companies/${name}`);
 };
 
 // Export default api instance for use in other files

@@ -6,8 +6,8 @@ using ResumeAPI.DTOs;
 namespace ResumeAPI.Services;
 
 /// <summary>
-/// Calls the Python FastAPI AI service for real analysis and resume generation.
-/// Replaces the legacy JobMatchService-based analysis flow.
+/// Calls the Python FastAPI AI service for resume-first analysis.
+/// Sends resume text and receives structured analysis results.
 /// </summary>
 public class AiAnalysisService : IAiAnalysisService
 {
@@ -26,17 +26,11 @@ public class AiAnalysisService : IAiAnalysisService
         _logger = logger;
     }
 
-    public async Task<AiAnalysisResponseDto?> AnalyzeAsync(
-        string resumeText, string jdText, string roleTitle,
-        string companyName, string experienceLevel)
+    public async Task<AiAnalysisResponseDto?> AnalyzeAsync(string resumeText)
     {
         var payload = new
         {
             resume_text = resumeText,
-            jd_text = jdText,
-            role_title = roleTitle,
-            company_name = companyName ?? "",
-            experience_level = experienceLevel ?? "",
         };
 
         var json = JsonSerializer.Serialize(payload, JsonOpts);
@@ -57,41 +51,6 @@ public class AiAnalysisService : IAiAnalysisService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deserializing AI analysis response");
-            return null;
-        }
-    }
-
-    public async Task<AiResumeGenerationResponseDto?> GenerateResumeAsync(
-        string resumeText, string jdText, string roleTitle,
-        string companyName, string experienceLevel)
-    {
-        var payload = new
-        {
-            resume_text = resumeText,
-            jd_text = jdText,
-            role_title = roleTitle,
-            company_name = companyName ?? "",
-            experience_level = experienceLevel ?? "",
-        };
-
-        var json = JsonSerializer.Serialize(payload, JsonOpts);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        try
-        {
-            var response = await _httpClient.PostAsync("/generate-resume", content);
-            response.EnsureSuccessStatusCode();
-            var body = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<AiResumeGenerationResponseDto>(body, JsonOpts);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Failed to reach AI service at /generate-resume");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deserializing AI resume generation response");
             return null;
         }
     }

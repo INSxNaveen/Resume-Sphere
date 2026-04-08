@@ -199,3 +199,108 @@ def generate_learning_plan(missing_skills: list[dict], role_title: str = "") -> 
     plan.sort(key=lambda x: priority_order.get(x["priority"], 1))
 
     return plan
+
+
+JOB_ROLES = [
+    {
+        "title": "Frontend Engineer",
+        "core_skills": ["JavaScript", "TypeScript", "React", "Vue", "Angular", "HTML", "CSS", "Tailwind CSS"],
+        "bonus_skills": ["Redux", "GraphQL", "Next.js", "Vite", "Jest"],
+        "description": "Develop user-facing interfaces and web applications."
+    },
+    {
+        "title": "Backend Engineer",
+        "core_skills": ["Python", "Node.js", "Java", "C#", "Go", "PostgreSQL", "MongoDB", "REST API", "SQL"],
+        "bonus_skills": ["Redis", "Docker", "AWS", "GraphQL", "Microservices"],
+        "description": "Build robust server-side APIs and database architectures."
+    },
+    {
+        "title": "Full Stack Engineer",
+        "core_skills": ["JavaScript", "React", "Node.js", "Python", "SQL", "PostgreSQL"],
+        "bonus_skills": ["Docker", "AWS", "TypeScript", "Next.js"],
+        "description": "End-to-end web application development."
+    },
+    {
+        "title": "DevOps Engineer",
+        "core_skills": ["Docker", "Kubernetes", "AWS", "CI/CD", "Linux", "Bash", "Terraform"],
+        "bonus_skills": ["Ansible", "Python", "Prometheus", "Grafana", "Google Cloud Platform"],
+        "description": "Streamline deployments, infrastructure, and cloud architecture."
+    },
+    {
+        "title": "Data Scientist",
+        "core_skills": ["Python", "Machine Learning", "Pandas", "NumPy", "SQL", "Data Analysis"],
+        "bonus_skills": ["Deep Learning", "TensorFlow", "PyTorch", "Data Visualization"],
+        "description": "Extract insights and build predictive models from data."
+    },
+    {
+        "title": "Mobile Engineer",
+        "core_skills": ["React Native", "Flutter", "Swift", "Android", "iOS", "Kotlin"],
+        "bonus_skills": ["JavaScript", "TypeScript", "Firebase", "REST API"],
+        "description": "Build and publish mobile applications."
+    }
+]
+
+def infer_jobs(resume_skills: list[str]) -> tuple[list[dict], list[dict], list[dict]]:
+    """
+    Given a list of skills, predict eligible jobs, next improvement suggestions,
+    and aspirational (unlocked) opportunities.
+    """
+    resume_skills_lower = {s.lower() for s in resume_skills}
+    eligible_jobs = []
+    unlocked_opportunities = []
+    
+    # Global missing skills for improvement suggestions
+    all_missing_core = {}
+
+    for role in JOB_ROLES:
+        core_matches = [s for s in role["core_skills"] if s.lower() in resume_skills_lower]
+        bonus_matches = [s for s in role["bonus_skills"] if s.lower() in resume_skills_lower]
+        
+        missing_core = [s for s in role["core_skills"] if s.lower() not in resume_skills_lower]
+        
+        core_score = len(core_matches) / len(role["core_skills"]) if role["core_skills"] else 0
+        
+        if core_score >= 0.4:
+            # Eligible job
+            eligible_jobs.append({
+                "title": role["title"],
+                "fitReason": f"Matches {len(core_matches)} core skills.",
+                "matchScore": int(core_score * 100),
+                "missingSkills": missing_core[:3]
+            })
+            for ms in missing_core:
+                if ms not in all_missing_core:
+                    all_missing_core[ms] = {"count": 1, "roles": [role["title"]]}
+                else:
+                    all_missing_core[ms]["count"] += 1
+                    all_missing_core[ms]["roles"].append(role["title"])
+        elif core_score > 0.0:
+            # Unlocked opportunity if they learn the missing bits
+            unlocked_opportunities.append({
+                "title": role["title"],
+                "whyUnlocked": f"Can unlock by learning {', '.join(missing_core[:3])}",
+                "requiredAddedSkills": missing_core
+            })
+            for ms in missing_core:
+                if ms not in all_missing_core:
+                    all_missing_core[ms] = {"count": 1, "roles": [role["title"]]}
+                else:
+                    all_missing_core[ms]["count"] += 1
+                    all_missing_core[ms]["roles"].append(role["title"])
+
+    # Sort eligible jobs by match score
+    eligible_jobs.sort(key=lambda x: x["matchScore"], reverse=True)
+    unlocked_opportunities.sort(key=lambda x: len(x["requiredAddedSkills"]))
+    
+    # Generate improvement suggestions from the most needed skills
+    sorted_missing = sorted(all_missing_core.items(), key=lambda x: x[1]["count"], reverse=True)
+    improvement_suggestions = []
+    for skill, data in sorted_missing[:5]:
+        improvement_suggestions.append({
+            "skill": skill,
+            "reason": f"Required for {', '.join(data['roles'][:2])}",
+            "priority": "High" if data["count"] > 1 else "Medium"
+        })
+        
+    return eligible_jobs, improvement_suggestions, unlocked_opportunities
+

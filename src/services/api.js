@@ -11,6 +11,17 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
+// Request Interceptor to add JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 // ========== API COMMUNICATION FUNCTIONS ==========
 // These functions connect frontend to backend server
 // Backend team: Implement corresponding endpoints
@@ -78,6 +89,54 @@ export const sendOtp = async (email) => {
 export const verifyOtp = async (email, otp, newPassword) => {
   return await api.post('/auth/verify-otp', { email, otp, newPassword });
 };
+
+// Applications API
+
+/**
+ * Fetch all job applications for the user
+ * @returns {Promise<Array>} - List of job applications
+ */
+export async function getApplications() {
+  const response = await api.get('/api/applications');
+  return response.data;
+}
+
+/**
+ * Update the status of a job application
+ * @param {string} id - The application ID
+ * @param {string} status - New status (Applied, Failed, InterviewScheduled, etc)
+ * @returns {Promise<Object>} - Updated application
+ */
+export async function updateApplicationStatus(id, status) {
+  const response = await api.patch(`/api/applications/${id}/status`, { status });
+  return response.data;
+}
+
+/**
+ * Get aggregated application statistics
+ * @returns {Promise<Object>} - Stats (total, thisWeek, avgScore, interviews)
+ */
+export async function getApplicationStats() {
+  const apps = await getApplications();
+  
+  const total = apps.length;
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  
+  const thisWeek = apps.filter(app => new Date(app.appliedAt) > oneWeekAgo).length;
+  
+  const totalScore = apps.reduce((sum, app) => sum + (app.matchScore || 0), 0);
+  const avgScore = total > 0 ? (totalScore / total).toFixed(1) : 0;
+  
+  const interviewsScheduled = apps.filter(app => app.status === 'InterviewScheduled').length;
+  
+  return {
+    total,
+    thisWeek,
+    avgScore,
+    interviewsScheduled
+  };
+}
 
 // Export default api instance for use in other files
 export default api;

@@ -202,4 +202,46 @@ public class ResumeController : ControllerBase
         if (result == null) return NotFound(new { error = "Generated resume not found." });
         return Ok(result);
     }
+
+    /// <summary>Get the complete profile of the user's most recent active resume.</summary>
+    [HttpGet("active-profile")]
+    [Authorize]
+    public async Task<ActionResult<ResumeProfileDto>> GetActiveProfile()
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound(new { error = "User not found." });
+
+        var lastResume = await _db.Resumes
+            .Where(r => r.UserId == userId)
+            .OrderByDescending(r => r.UploadedAt)
+            .FirstOrDefaultAsync();
+
+        if (lastResume == null)
+            return NotFound(new { error = "No resume found for this user." });
+
+        var skills = await _db.ResumeExtractedSkills
+            .Where(s => s.ResumeId == lastResume.Id)
+            .Select(s => s.SkillName)
+            .Distinct()
+            .ToListAsync();
+
+        var profile = new ResumeProfileDto
+        {
+            FullName = user.FullName,
+            Email = user.Email,
+            Phone = user.Phone,
+            ResumeText = lastResume.NormalizedText,
+            Skills = skills,
+            ExperienceSummary = lastResume.NormalizedText.Length > 500 
+                ? lastResume.NormalizedText.Substring(0, 500) 
+                : lastResume.NormalizedText,
+            ResumeId = lastResume.Id
+        };
+
+        return Ok(profile);
+    }
 }

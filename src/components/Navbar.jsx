@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 // Import ThemeToggle component for light/dark mode switching
 import ThemeToggle from './ThemeToggle';
 import logo from '../assets/logo.svg';
+import { useApplicationsBadge } from '../hooks/useApplicationsBadge';
 
 /**
  * NavLink Component
@@ -42,6 +43,7 @@ const NavLink = ({ to, children }) => {
  * Responsive design with adaptive colors for light/dark modes
  */
 const Navbar = () => {
+  const unreadCount = useApplicationsBadge();
   return (
     // Navigation bar with enhanced glassmorphism and theme-aware styling
     <nav className="fixed top-0 w-full z-50 
@@ -73,6 +75,16 @@ const Navbar = () => {
             <NavLink to="/">Home</NavLink>
             <NavLink to="/upload">Upload</NavLink>
             <NavLink to="/dashboard">Result</NavLink>
+            <NavLink to="/applications">
+              <div className="flex items-center gap-1.5">
+                <span>Applications</span>
+                {unreadCount > 0 && (
+                  <span className="inline-flex items-center justify-center w-4 h-4 text-[9px] font-black rounded-full bg-blue-600 text-white animate-pulse shadow-sm shadow-blue-500/40">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+            </NavLink>
             <NavLink to="/learning-hub">Learning</NavLink>
           </div>
 

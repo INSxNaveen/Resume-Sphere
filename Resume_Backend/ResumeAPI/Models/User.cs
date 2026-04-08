@@ -18,6 +18,9 @@ public class User
     [MaxLength(256)]
     public string FullName { get; set; } = string.Empty;
 
+    [MaxLength(32)]
+    public string Phone { get; set; } = string.Empty;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     // OTP and Email Verification
@@ -37,7 +40,6 @@ public class User
 
     // Navigation
     public ICollection<Resume> Resumes { get; set; } = new List<Resume>();
-    public ICollection<JobDescription> JobDescriptions { get; set; } = new List<JobDescription>();
     public ICollection<Analysis> Analyses { get; set; } = new List<Analysis>();
     public ICollection<UserCourseSelection> CourseSelections { get; set; } = new List<UserCourseSelection>();
     public ICollection<UserCourseProgress> CourseProgresses { get; set; } = new List<UserCourseProgress>();

@@ -9,10 +9,9 @@ namespace ResumeAPI.Services;
 /// <summary>
 /// Orchestrates the full analysis flow:
 /// 1. Validates resume ownership
-/// 2. Saves JD to database
-/// 3. Calls the Python FastAPI AI service with resume text + JD text
-/// 4. Persists all structured results (skills, keywords, suggestions) in PostgreSQL
-/// 5. Returns the complete analysis result
+/// 2. Calls the Python FastAPI AI service with resume text
+/// 3. Persists all structured results in PostgreSQL
+/// 4. Returns the complete analysis result
 /// </summary>
 public class AnalysisService : IAnalysisService
 {
@@ -20,7 +19,10 @@ public class AnalysisService : IAnalysisService
     private readonly IAiAnalysisService _aiService;
     private readonly ILogger<AnalysisService> _logger;
 
-    public AnalysisService(AppDbContext context, IAiAnalysisService aiService, ILogger<AnalysisService> logger)
+    public AnalysisService(
+        AppDbContext context,
+        IAiAnalysisService aiService,
+        ILogger<AnalysisService> logger)
     {
         _context = context;
         _aiService = aiService;
@@ -29,283 +31,246 @@ public class AnalysisService : IAnalysisService
 
     public async Task<AnalysisResultDto> RunAnalysisAsync(Guid userId, RunAnalysisRequestDto request)
     {
-        // ── 1. Validate resume ──────────────────────────────────────────────
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
+
+        if (request.ResumeId == Guid.Empty)
+            throw new ArgumentException("ResumeId is required.", nameof(request));
+
+        // 1. Validate resume ownership
         var resume = await _context.Resumes
             .FirstOrDefaultAsync(r => r.Id == request.ResumeId && r.UserId == userId);
 
         if (resume == null)
             throw new ArgumentException("Resume not found or does not belong to user.");
 
-        if (string.IsNullOrWhiteSpace(request.JobDescriptionText))
-            throw new ArgumentException("Job description text is required.");
-
-        if (string.IsNullOrWhiteSpace(request.RoleTitle))
-            throw new ArgumentException("Role title is required.");
-
-        // ── 2. Save the raw JD ──────────────────────────────────────────────
-        var jd = new JobDescription
-        {
-            UserId = userId,
-            RawText = request.JobDescriptionText,
-            RoleTitle = request.RoleTitle,
-            CompanyName = request.CompanyName,
-            ExperienceLevel = request.ExperienceLevel,
-            NormalizedText = request.JobDescriptionText.ToLower(),
-            CreatedAt = DateTime.UtcNow,
-        };
-        _context.JobDescriptions.Add(jd);
-        await _context.SaveChangesAsync();
-
-        // ── 3. Call the AI service ──────────────────────────────────────────
-        var aiResult = await _aiService.AnalyzeAsync(
-            resume.RawText,
-            request.JobDescriptionText,
-            request.RoleTitle,
-            request.CompanyName ?? "",
-            request.ExperienceLevel ?? ""
-        );
+        // 2. Call AI service
+        var aiResult = await _aiService.AnalyzeAsync(resume.RawText);
 
         if (aiResult == null)
         {
-            _logger.LogError("AI service returned null — service may be down");
+            _logger.LogError("AI service returned null for ResumeId: {ResumeId}, UserId: {UserId}", request.ResumeId, userId);
             throw new InvalidOperationException(
                 "AI analysis service is currently unavailable. Please ensure the AI service is running on the configured URL and try again.");
         }
 
-        // ── 4. Build score breakdown JSON ───────────────────────────────────
-        var breakdown = new ScoreBreakdownDto
-        {
-            RequiredSkillsScore = aiResult.ScoreBreakdown.RequiredSkillsScore,
-            PreferredSkillsScore = aiResult.ScoreBreakdown.PreferredSkillsScore,
-            AtsKeywordsScore = aiResult.ScoreBreakdown.AtsKeywordsScore,
-            ExperienceRelevanceScore = aiResult.ScoreBreakdown.ExperienceRelevanceScore,
-            EducationScore = aiResult.ScoreBreakdown.EducationScore,
-            ResumeQualityScore = aiResult.ScoreBreakdown.ResumeQualityScore,
-        };
+        // 3. Normalize / clean AI output
+        var currentSkills = (aiResult.CurrentSkills ?? new List<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        // ── 5. Persist Analysis entity ──────────────────────────────────────
-        var analysis = new Analysis
-        {
-            UserId = userId,
-            ResumeId = resume.Id,
-            JobDescriptionId = jd.Id,
-            OverallScore = aiResult.OverallScore,
-            ScoreBreakdownJson = JsonSerializer.Serialize(breakdown),
-            DeductionReasonsJson = JsonSerializer.Serialize(aiResult.DeductionReasons),
-            Status = "completed",
-            CreatedAt = DateTime.UtcNow,
-        };
-        _context.Analyses.Add(analysis);
-        await _context.SaveChangesAsync();
-
-        // ── 6. Persist extracted resume skills ──────────────────────────────
-        foreach (var skill in aiResult.MatchedSkills)
-        {
-            _context.ResumeExtractedSkills.Add(new ResumeExtractedSkill
+        var eligibleJobs = (aiResult.EligibleJobs ?? new List<AiEligibleJobDto>())
+            .Select(j => new EligibleJobDto
             {
-                AnalysisId = analysis.Id,
+                Title = j.Title,
+                FitReason = j.FitReason,
+                MatchScore = j.MatchScore,
+                MissingSkills = j.MissingSkills ?? new List<string>()
+            })
+            .ToList();
+
+        var improvementSuggestions = (aiResult.ImprovementSuggestions ?? new List<AiImprovementSuggestionDto>())
+            .Select(s => new ImprovementSuggestionDto
+            {
+                Skill = s.Skill,
+                Reason = s.Reason,
+                Priority = s.Priority
+            })
+            .ToList();
+
+        var unlockedOpportunities = (aiResult.UnlockedOpportunities ?? new List<AiUnlockedOpportunityDto>())
+            .Select(o => new UnlockedOpportunityDto
+            {
+                Title = o.Title,
+                WhyUnlocked = o.WhyUnlocked,
+                RequiredAddedSkills = o.RequiredAddedSkills ?? new List<string>()
+            })
+            .ToList();
+
+        // 4. Persist analysis + related data in one transaction
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            var analysis = new Analysis
+            {
+                UserId = userId,
                 ResumeId = resume.Id,
-                SkillName = skill,
-                Section = "Matched",
-                Confidence = 1.0m,
-            });
-        }
+                CurrentSkillsJson = JsonSerializer.Serialize(currentSkills),
+                EligibleJobsJson = JsonSerializer.Serialize(eligibleJobs),
+                ImprovementSuggestionsJson = JsonSerializer.Serialize(improvementSuggestions),
+                UnlockedOpportunitiesJson = JsonSerializer.Serialize(unlockedOpportunities),
+                Status = "completed",
+                CreatedAt = DateTime.UtcNow,
+            };
 
-        // ── 7. Persist JD extracted skills ──────────────────────────────────
-        foreach (var skill in aiResult.JdEntities.RequiredSkills)
-        {
-            _context.JobDescriptionExtractedSkills.Add(new JobDescriptionExtractedSkill
+            _context.Analyses.Add(analysis);
+            await _context.SaveChangesAsync();
+
+            // Persist extracted skills
+            foreach (var skill in currentSkills)
+            {
+                _context.ResumeExtractedSkills.Add(new ResumeExtractedSkill
+                {
+                    AnalysisId = analysis.Id,
+                    ResumeId = resume.Id,
+                    SkillName = skill,
+                    Section = "Matched",
+                    Confidence = 1.0m,
+                });
+            }
+
+            // Persist course recommendations from improvement suggestions
+            foreach (var suggestion in improvementSuggestions)
+            {
+                _context.CourseRecommendations.Add(new CourseRecommendation
+                {
+                    AnalysisId = analysis.Id,
+                    SkillName = suggestion.Skill,
+                    Priority = string.IsNullOrWhiteSpace(suggestion.Priority) ? "medium" : suggestion.Priority.ToLowerInvariant(),
+                    WhyItMatters = suggestion.Reason,
+                    Difficulty = "beginner",
+                    EstimatedHours = 15,
+                });
+            }
+
+            // Persist analysis history
+            _context.AnalysisHistories.Add(new AnalysisHistory
+            {
+                UserId = userId,
+                AnalysisId = analysis.Id,
+                EventType = "analysis_completed",
+                OccurredAt = DateTime.UtcNow,
+            });
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            // 5. Return final DTO
+            return new AnalysisResultDto
             {
                 AnalysisId = analysis.Id,
-                JobDescriptionId = jd.Id,
-                SkillName = skill,
-                Priority = "required",
-            });
+                CurrentSkills = currentSkills,
+                EligibleJobs = eligibleJobs,
+                ImprovementSuggestions = improvementSuggestions,
+                UnlockedOpportunities = unlockedOpportunities,
+                Status = analysis.Status,
+                CreatedAt = analysis.CreatedAt,
+                ResumeId = analysis.ResumeId,
+            };
         }
-        foreach (var skill in aiResult.JdEntities.PreferredSkills)
+        catch (Exception ex)
         {
-            _context.JobDescriptionExtractedSkills.Add(new JobDescriptionExtractedSkill
-            {
-                AnalysisId = analysis.Id,
-                JobDescriptionId = jd.Id,
-                SkillName = skill,
-                Priority = "preferred",
-            });
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Failed to complete analysis for ResumeId: {ResumeId}, UserId: {UserId}", request.ResumeId, userId);
+            throw;
         }
-
-        // ── 8. Persist missing skills ───────────────────────────────────────
-        foreach (var ms in aiResult.MissingSkills)
-        {
-            _context.AnalysisMissingSkills.Add(new AnalysisMissingSkill
-            {
-                AnalysisId = analysis.Id,
-                SkillName = ms.SkillName,
-                Priority = ms.Priority,
-                Decision = ms.Decision,
-            });
-        }
-
-        // ── 9. Persist missing ATS keywords ─────────────────────────────────
-        foreach (var kw in aiResult.MissingKeywords)
-        {
-            _context.AnalysisMissingKeywords.Add(new AnalysisMissingKeyword
-            {
-                AnalysisId = analysis.Id,
-                Keyword = kw.Keyword,
-                Context = kw.Context,
-            });
-        }
-
-        // ── 10. Persist suggestions ─────────────────────────────────────────
-        foreach (var sug in aiResult.Suggestions)
-        {
-            _context.AnalysisSuggestions.Add(new AnalysisSuggestion
-            {
-                AnalysisId = analysis.Id,
-                Type = sug.Type,
-                Title = sug.Title,
-                Description = sug.Description,
-            });
-        }
-
-        // ── 11. Persist course recommendations from learning plan ────────────
-        foreach (var item in aiResult.LearningPlan)
-        {
-            _context.CourseRecommendations.Add(new CourseRecommendation
-            {
-                AnalysisId = analysis.Id,
-                SkillName = item.SkillName,
-                Priority = item.Priority,
-                WhyItMatters = item.WhyItMatters,
-                Difficulty = item.Difficulty,
-                EstimatedHours = item.EstimatedHours,
-                FreeResourceTitle = item.FreeResource?.Title ?? "",
-                FreeResourceUrl = item.FreeResource?.Url ?? "",
-                PaidResourceTitle = item.PaidResource?.Title ?? "",
-                PaidResourceUrl = item.PaidResource?.Url ?? "",
-                PracticeProject = item.PracticeProject,
-            });
-        }
-
-        // ── 12. Persist analysis history event ──────────────────────────────
-        _context.AnalysisHistories.Add(new AnalysisHistory
-        {
-            UserId = userId,
-            AnalysisId = analysis.Id,
-            EventType = "analysis_completed",
-            OccurredAt = DateTime.UtcNow,
-        });
-
-        await _context.SaveChangesAsync();
-
-        // ── 13. Return result DTO ───────────────────────────────────────────
-        return new AnalysisResultDto
-        {
-            AnalysisId = analysis.Id,
-            OverallScore = aiResult.OverallScore,
-            MatchedSkills = aiResult.MatchedSkills,
-            MissingSkills = aiResult.MissingSkills.Select(ms => new MissingSkillDetail
-            {
-                SkillName = ms.SkillName,
-                Explanation = ms.WhyItMatters,
-                JobRelevance = ms.Priority,
-            }).ToList(),
-            MissingKeywords = aiResult.MissingKeywords.Select(kw => new MissingKeywordDetail
-            {
-                Keyword = kw.Keyword,
-                Context = kw.Context,
-            }).ToList(),
-            ScoreBreakdown = breakdown,
-            DeductionReasons = aiResult.DeductionReasons,
-            Suggestions = aiResult.Suggestions.Select(s => new SuggestionDetail
-            {
-                Type = s.Type,
-                Title = s.Title,
-                Description = s.Description,
-            }).ToList(),
-            Status = analysis.Status,
-            CreatedAt = analysis.CreatedAt,
-            ResumeId = analysis.ResumeId,
-            JobDescriptionId = jd.Id,
-        };
     }
 
     public async Task<AnalysisResultDto?> GetAnalysisAsync(Guid userId, Guid analysisId)
     {
         var analysis = await _context.Analyses
-            .Include(a => a.MissingSkills)
-            .Include(a => a.MissingKeywords)
-            .Include(a => a.Suggestions)
             .Include(a => a.ResumeExtractedSkills)
-            .Include(a => a.JobDescription)
             .FirstOrDefaultAsync(a => a.Id == analysisId && a.UserId == userId);
 
-        if (analysis == null) return null;
+        if (analysis == null)
+            return null;
 
-        var breakdown = JsonSerializer.Deserialize<ScoreBreakdownDto>(analysis.ScoreBreakdownJson)
-                        ?? new ScoreBreakdownDto();
+        var eligibleJobs = string.IsNullOrWhiteSpace(analysis.EligibleJobsJson)
+            ? new List<EligibleJobDto>()
+            : JsonSerializer.Deserialize<List<EligibleJobDto>>(analysis.EligibleJobsJson) ?? new List<EligibleJobDto>();
 
-        var storedDeductions = string.IsNullOrWhiteSpace(analysis.DeductionReasonsJson)
-            ? new List<string>()
-            : JsonSerializer.Deserialize<List<string>>(analysis.DeductionReasonsJson) ?? new List<string>();
+        var improvementSuggestions = string.IsNullOrWhiteSpace(analysis.ImprovementSuggestionsJson)
+            ? new List<ImprovementSuggestionDto>()
+            : JsonSerializer.Deserialize<List<ImprovementSuggestionDto>>(analysis.ImprovementSuggestionsJson) ?? new List<ImprovementSuggestionDto>();
+
+        var unlockedOpportunities = string.IsNullOrWhiteSpace(analysis.UnlockedOpportunitiesJson)
+            ? new List<UnlockedOpportunityDto>()
+            : JsonSerializer.Deserialize<List<UnlockedOpportunityDto>>(analysis.UnlockedOpportunitiesJson) ?? new List<UnlockedOpportunityDto>();
+
+        var currentSkills = analysis.ResumeExtractedSkills.Any()
+            ? analysis.ResumeExtractedSkills
+                .Where(s => !string.IsNullOrWhiteSpace(s.SkillName))
+                .Select(s => s.SkillName.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : (string.IsNullOrWhiteSpace(analysis.CurrentSkillsJson)
+                ? new List<string>()
+                : JsonSerializer.Deserialize<List<string>>(analysis.CurrentSkillsJson) ?? new List<string>());
 
         return new AnalysisResultDto
         {
             AnalysisId = analysis.Id,
-            OverallScore = analysis.OverallScore,
-            MatchedSkills = analysis.ResumeExtractedSkills
-                .Where(s => s.Section == "Matched")
-                .Select(s => s.SkillName)
-                .Distinct()
-                .ToList(),
-            MissingSkills = analysis.MissingSkills.Select(ms => new MissingSkillDetail
-            {
-                SkillName = ms.SkillName,
-                Explanation = $"Required for the {analysis.JobDescription?.RoleTitle ?? "target"} role",
-                JobRelevance = ms.Priority ?? "medium",
-            }).ToList(),
-            MissingKeywords = analysis.MissingKeywords.Select(kw => new MissingKeywordDetail
-            {
-                Keyword = kw.Keyword,
-                Context = kw.Context ?? "",
-            }).ToList(),
-            ScoreBreakdown = breakdown,
-            DeductionReasons = storedDeductions,
-            Suggestions = analysis.Suggestions.Select(s => new SuggestionDetail
-            {
-                Type = s.Type,
-                Title = s.Title ?? "",
-                Description = s.Description ?? "",
-            }).ToList(),
+            CurrentSkills = currentSkills,
+            EligibleJobs = eligibleJobs,
+            ImprovementSuggestions = improvementSuggestions,
+            UnlockedOpportunities = unlockedOpportunities,
             Status = analysis.Status,
             CreatedAt = analysis.CreatedAt,
             ResumeId = analysis.ResumeId,
-            JobDescriptionId = analysis.JobDescriptionId,
         };
     }
 
     public async Task<List<AnalysisHistoryDto>> GetAnalysisHistoryAsync(Guid userId)
     {
-        return await _context.Analyses
-            .Include(a => a.JobDescription)
-            .Include(a => a.MissingSkills)
-            .Include(a => a.ResumeExtractedSkills)
-            .Where(a => a.UserId == userId)
+        var analyses = await _context.Analyses
+            .Where(a => a.UserId == userId && a.Status == "completed")
             .OrderByDescending(a => a.CreatedAt)
-            .Select(a => new AnalysisHistoryDto
-            {
-                AnalysisId = a.Id,
-                RoleTitle = a.JobDescription!.RoleTitle,
-                CompanyName = a.JobDescription.CompanyName,
-                OverallScore = a.OverallScore,
-                CreatedAt = a.CreatedAt,
-                MatchedSkillsCount = a.ResumeExtractedSkills
-                    .Where(s => s.Section == "Matched")
-                    .Select(s => s.SkillName)
-                    .Distinct()
-                    .Count(),
-                MissingSkillsCount = a.MissingSkills.Count,
-            })
             .ToListAsync();
+
+        var historyDtos = new List<AnalysisHistoryDto>();
+
+        foreach (var analysis in analyses)
+        {
+            var eligibleJobs = string.IsNullOrWhiteSpace(analysis.EligibleJobsJson)
+                ? new List<EligibleJobDto>()
+                : JsonSerializer.Deserialize<List<EligibleJobDto>>(analysis.EligibleJobsJson) ?? new List<EligibleJobDto>();
+
+            var currentSkills = string.IsNullOrWhiteSpace(analysis.CurrentSkillsJson)
+                ? new List<string>()
+                : JsonSerializer.Deserialize<List<string>>(analysis.CurrentSkillsJson) ?? new List<string>();
+
+            var topJob = eligibleJobs
+                .OrderByDescending(j => j.MatchScore)
+                .FirstOrDefault();
+
+            // Calculate skill counts
+            int matchedCount = currentSkills.Count;
+            int missingCount = topJob?.MissingSkills?.Count ?? 0;
+
+            // FILTER: Skip 'junk' results that have no skills and no match (failed or empty runs)
+            if (matchedCount == 0 && (topJob == null || topJob.MatchScore <= 0))
+            {
+                continue;
+            }
+
+            historyDtos.Add(new AnalysisHistoryDto
+            {
+                AnalysisId = analysis.Id,
+                CreatedAt = analysis.CreatedAt,
+                OverallScore = topJob?.MatchScore ?? 0,
+                RoleTitle = topJob?.Title ?? "General Role",
+                CompanyName = "Target Company", // Could be enhanced if company was extracted
+                MatchedSkillsCount = matchedCount,
+                MissingSkillsCount = missingCount
+            });
+        }
+
+        return historyDtos;
+    }
+
+    public async Task<bool> DeleteAnalysisAsync(Guid userId, Guid analysisId)
+    {
+        var analysis = await _context.Analyses
+            .FirstOrDefaultAsync(a => a.Id == analysisId && a.UserId == userId);
+
+        if (analysis == null)
+            return false;
+
+        _context.Analyses.Remove(analysis);
+        await _context.SaveChangesAsync();
+        return true;
     }
 }
